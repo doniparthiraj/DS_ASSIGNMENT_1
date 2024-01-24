@@ -1,0 +1,21 @@
+version: "3.9"
+services:
+  servicename:
+    build: ./LoadBalancer
+    image: lb_image
+    container_name: lb_server
+    ports:
+      - "5000:5000"
+    privileged: true  
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      net1:
+        aliases:
+          - lb_server
+    environment:
+      SERVER_ID: 100
+
+networks:
+  net1:
+    driver: bridge
