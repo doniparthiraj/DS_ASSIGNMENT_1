@@ -67,4 +67,3 @@ class ConsistentHash:
             if(self.slot[s][0] == serid):
 
                 self.slot[s] = []
-
