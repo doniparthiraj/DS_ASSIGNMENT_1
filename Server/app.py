@@ -14,7 +14,11 @@ def home():
 
 @app.route('/heartbeat',methods=["GET"])
 def heartbeat():
-    return ' ',200
+    response = {
+        'message' : ' ',
+        'code' : 200
+    }
+    return jsonify(response)
 
 if __name__ == '__main__':
     app.run(debug = True,host = '0.0.0.0',port = 5000)
