@@ -2,8 +2,11 @@ from flask import Flask,jsonify,redirect,request,url_for
 import os
 import subprocess
 import requests
+from consistent_hash import ConsistentHash as CH
 
 app = Flask(__name__)
+
+hash = CH() 
 
 All_servers = {}
 DOCKER_IMAGE_NAME = "flaskserver"
@@ -15,30 +18,41 @@ def start_new_server(server_name):
     container_name = server_name
     image_name = DOCKER_IMAGE_NAME
 
-    res = os.popen(f'sudo docker run --name {container_name} --network ds_project_net1 --network-alias {container_name} -d {image_name}').read()
-
-    All_servers[server_name] = server_name   #adding it to the list
-
+    res = os.popen(f'sudo docker run --name {container_name} --network ds_assignment_1_net1 --network-alias {container_name} -d {image_name}').read()
+    
     if len(res) > 0:
+        All_servers[server_name] = "container_"+server_name   #adding it to the dict
+        hash.add_server_hash(server_name)
         print("Success")
     else:
         raise Exception("Failed to start the server. Check logs for details.")
 
+def checkHeartbeat(server_id):
+    response,code = requests.get(f"http://{All_servers[server_id]}:5000/heart?id={server_id}")
+    return code
+
+def get_avail_serv(cli_id):
+
+    get_ser_id = hash.reqhash(cli_id)
+    while True:
+        if get_ser_id is None:
+            raise Exception("No servers are available")
+        if checkHeartbeat(get_ser_id) == 200:
+            return get_ser_id
+        else:
+            #removecontainer call
+            hash.server_failure(get_ser_id)
 
 @app.route('/<path>',methods=["GET"])
 def path_redirect(path):    
-    
-    container_name = 'container7'
-    id = '106'
     if path == 'home':
-        response = requests.get(f"http://{container_name}:5000/home/{id}")
+        cli_id = request.args.get('id')
+        server_id = get_avail_serv(cli_id)
+        response = requests.get(f"http://{All_servers[server_id]}:5000/home?id={server_id}")
         return jsonify(response.json())
-    elif path == 'heartbeat':
-        response = requests.get(f"http://{container_name}:5000/heartbeat")
-        return response.text, response.status_code
     elif path == 'rep':
         # print("rep")
-        res = rep()
+        res = list(All_servers.keys())
         if len(res) > 0:
             return jsonify({
                 'message': {
@@ -50,7 +64,6 @@ def path_redirect(path):
         else:
             return jsonify({'message': 'Failed to laod the replicas'}), 400
     else:
-        print("Else")
         response = {
             'message' : f'Error endpoint does not exists -- {path}',
             'status' : 'failure'
@@ -74,18 +87,6 @@ def add():
         return jsonify({'message': f'Error: {str(e)}'}), 500
 
 
-def rep():
-    try:
-        result = subprocess.run(['docker', 'ps', '--format', '{{.Names}}'], check=True, capture_output=True, text=True)
-
-        # Split the output into a list of container names
-        container_names = result.stdout.strip().split('\n')
-        # print(container_names, flush=True)
-        return container_names
-        
-    except Exception as e:
-        return jsonify({'message': f'Error: {str(e)}'}), 500
-
 @app.route('/rm',methods=["DELETE"])
 def rm():
     try:
@@ -98,29 +99,29 @@ def rm():
             for server in hostnames:
                 if server != 'lb_server':
                     res = os.system(f'sudo docker stop {server} && sudo docker rm {server}')
-                    print("resposnse", res, flush=True)
-                    if res < 0:
+                    if res > 0:
                         return jsonify({"message" : f"{server} not found","status" : "failure"}),400
+                    All_servers.pop(server) #removing from dict
                 else:
                     return jsonify({"message" : "Permission Denied","status" : "failure"}),400
-            
+
+            #we need to randomly remove servers if n > len(hostnames)
             for _ in range(n-len(hostnames)):
-                result = subprocess.run(['docker', 'ps', '--format', '{{.Names}}'], check=True, capture_output=True, text=True)
-                random_server = result.stdout.strip().split('\n')[0]
-                if random_server == 'lb_server':
-                    random_server = result.stdout.strip().split('\n')[1]
-                res = os.system(f'sudo docker stop {random_server} && sudo docker rm {random_server}')
-                
-                if res > 0:
-                    return jsonify({"message" : f"{random_server} not found","status" : "failure"}),400
-                hostnames.append(random_server)
+                result = list(All_servers.keys())
+                if len(result) > 0: #checking if containers are available or not for removing
+                    random_server = result[0]
+                    res = os.system(f'sudo docker stop {random_server} && sudo docker rm {random_server}')
+                    All_servers.pop(random_server)
+                    hostnames.append(random_server)
+
             return jsonify({
                 'message': {
-                    "N": n,  # Use len(res) to get the length of the 'res' list
+                    "N": n,  
                     "replicas": [server for server in hostnames]
-                },
-                "status": "successful"
-            }), 200
+                        },
+                        "status": "successful"
+                    }), 200
+
         else:
             for server in hostnames:
                 if server != 'lb_server':
@@ -128,15 +129,18 @@ def rm():
                     print("resposnse", res, flush=True)
                     if res > 0:
                         return jsonify({"message" : f"{server} not found","status" : "failure"}),400
-                    return jsonify({
-                        'message': {
-                                    "N": n,  # Use len(res) to get the length of the 'res' list
-                                    "replicas": [server for server in hostnames]
-                                },
-                                "status": "successful"
-                            }), 200
+                    All_servers.pop(server) #removing from dict
                 else:
                     return jsonify({"message" : "Permission Denied","status" : "failure"}),400
+
+            return jsonify({
+                'message': {
+                            "N": n,  # Use len(res) to get the length of the 'res' list
+                            "replicas": [server for server in hostnames]
+                            },
+                            "status": "successful"
+                        }), 200
+                
 
     except Exception as e:
         return jsonify({'message': f'Error: {str(e)}'}), 500

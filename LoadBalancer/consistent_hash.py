@@ -1,92 +1,68 @@
 import re
-slot = []
 M = 512
 K = 9
-mappings = {}
-arrange = {}
-reqsList = []
 
-def on_ser_failure(serid):
-    for s in range(0,M):
-        if len(slot[s]) == 0 :
-            continue
-        else:
-            if(slot[s][1] == serid):
-                slot[s] = []
+class ConsistentHash:
 
-def check_next(i):
-    if(len(slot[i]) != 0):
-        curr_i = i
-        while(len(slot[i]) != 0 and i < M):
-            i+=1
-        if( i == M):
-            i = 0
-            while(len(slot[i]) != 0 and i < curr_i):
-                i+=1
-            if(i == curr_i):
-                return -1
+    def __init__(self):
+        self.serv_no_to_name = {}
+        self.slot = []
+        for i in range(0,M):
+            self.slot.append([])
 
-    return i
+    def extract_id(self, serid):
+        match = re.search(r'(\d+)$', serid)
+        if match:
+            ser_id = match.group(1)
+            return int(ser_id)
 
-def serhash(serid,vid):
-    v = (serid*serid) + (vid*vid) + (2*vid) + 25
-    i = v%M
+    def add_server_hash(self, serid):
+        ind = self.extract_id(serid)
+        self.serv_no_to_name [ind] = serid
+        for j in range(1, K + 1):
+            self.serhash(ind, j)
 
-    i = check_next(i)
-    if(i == -1):
-        return "No slots are empty"
-    slot[i].append(serid)
-    slot[i].append(vid)
-    
+    def check_next(self, ind):
+        for i in range(ind,M):
+            if len(self.slot[i]) == 0:
+                return i
+        for i in range(0,ind):
+            if len(self.slot[i]) == 0:
+                return i
+        return -1
 
-def recv_server_id(i):
+    def serhash(self, serid, vid):
 
-    found = False
-    server = None
-    for s in range(i+1,M):
-        if len(slot[s]) == 0:
-            continue
-        else:
-            found = True
-            server = tuple(slot[s])
-            return slot[s][0]
-    
-    if found == False:
-        for s in range(0,i):
-            if len(slot[s]) == 0:
-                continue
-            else:
-                found = True
-                server = tuple(slot[s])
-                return slot[s][0]
+        v = serid**2 + vid**2 + 2*vid + 25
+        ind = v % M
 
-    return "No servers added"
+        ind = self.check_next( ind )
+        if(ind == -1):
+            return "No slots are empty"
+        self.slot[ind].append(serid)
+        self.slot[ind].append(vid)
+        
+    def recv_server_id(self, ind):
 
-def reqhash(reqid):
-	v = (reqid)*(reqid) + 2*(reqid) + 17
-	i = v%M
-	res = recv_server_id(i)
-	if res == "No servers added":
-		return -1
-	return res
+        for s in range(ind + 1, M):
+            if len(self.slot[s]) != 0:
+                return self.slot[s][0]
+   
+        for s in range(0, ind):
+            if len(self.slot[s]) != 0:
+                return self.slot[s][0]
 
+        return "No servers added"
 
-def extract_id(serid):
-	match = re.search(r'(\d+)$', serid)
-	if match:
-		ser_id = match.group(1)
-		return ser_id
-	else:
-		return -1
+    def reqhash(self, reqid):
+        v = reqid**2 + 2*reqid + 17
+        ind = v % M
+        res = self.recv_server_id(ind)
+        if res == "No servers added":
+            return None
+        return self.serv_no_to_name[res]
 
-
-def add_server_hash(serid):
-	for j in range(1,K+1):
-		serhash(serid,j)
-
-def initiate_slot():
-	for i in range(0,M):
-		slot.append([])
-
-
-
+    def on_ser_failure(self, serid):
+        for s in range(0, M):
+            if(self.slot[s][0] == serid):
+                self.slot[s] = []
