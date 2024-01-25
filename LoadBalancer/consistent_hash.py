@@ -65,4 +65,6 @@ class ConsistentHash:
     def on_ser_failure(self, serid):
         for s in range(0, M):
             if(self.slot[s][0] == serid):
+
                 self.slot[s] = []
+
