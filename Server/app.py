@@ -1,12 +1,13 @@
-from flask import Flask,jsonify
+from flask import Flask,jsonify,request
 import os
 
 app = Flask(__name__)
 
-@app.route('/home/<id>',methods=["GET"])
-def home(id):
+@app.route('/home',methods=["GET"])
+def home():
+    get_id = request.args.get('id')
     response = {
-        'message' : f'Hai from server {id}',
+        'message' : f'Hai from server {get_id}',
         'status' : 'successfull'
     }
     return jsonify(response), 200
