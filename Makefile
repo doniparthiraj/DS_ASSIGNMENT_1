@@ -8,7 +8,7 @@ build:
 	sudo docker compose up
 
 add:
-	curl -X POST -H "Content-Type: application/json" -d '{"n": 3, "hostnames": ["S7789","S343","S3485"]}' http://127.0.0.1:5000/add
+	curl -X POST -H "Content-Type: application/json" -d '{"n": 3, "hostnames": ["S1","S2","S3"]}' http://127.0.0.1:5000/add
 
 clean:
 	sudo docker rm  -f $$(sudo docker ps -aq)
