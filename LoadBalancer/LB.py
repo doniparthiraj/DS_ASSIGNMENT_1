@@ -47,7 +47,7 @@ def checkHeartbeat(server_name):
             return 304 if response.headers.get('content-length') == '0' else 200
         else:
             return response.status_code
-    except requests.exceptions.RequestException as e:
+    except Exception as e:
         print(f"Error: {e}")
         return 404
 
@@ -66,15 +66,16 @@ def spawn_new_server(server_name):
     new_server = f'{server_name}_{random_id}'
     start_new_server(new_server)
 
+#gets the server for client using hash 
 def get_avail_serv(cli_id, max_attempts = 2):
     attempts = 0
     while attempts < max_attempts:
         get_ser_name = hash.reqhash(int(cli_id))
         if get_ser_name is not None:
-            if checkHeartbeat(get_ser_name) == 200:
+            if checkHeartbeat(get_ser_name) == 200: #used to see the server is alive or not and returns if avaliable
                 return get_ser_name
             else:
-                spawn_new_server(get_ser_name)
+                spawn_new_server(get_ser_name)#removes the stopped server and spawns a newserver
         attempts += 1
 
     raise Exception("No available servers after multiple attempts")
@@ -161,7 +162,7 @@ def rm():
 
             return jsonify({
                 'message': {
-                    "N": n,  
+                    "N": len(All_servers),  
                     "replicas": [server for server in All_servers.keys()]
                         },
                         "status": "successful"

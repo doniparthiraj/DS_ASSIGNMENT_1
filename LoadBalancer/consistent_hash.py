@@ -1,3 +1,4 @@
+import random
 M = 512
 K = 9
 
@@ -57,3 +58,22 @@ class ConsistentHash:
         for s in range(0, M):
             if(len(self.slot[s]) != 0 and self.slot[s][0] == serid):
                 self.slot[s] = []
+
+    
+    def mod_reqhash(self,reqid):
+        v = reqid**2 + 2*reqid + 17 + random.randint(0,10000)
+        ind = v % M
+        res = self.recv_server_id(ind)
+        if res == "No servers added":
+            return None
+        return self.serv_no_to_name[res]
+    
+    def mod_serhash(self,serid,vid):
+        v = serid**2 + vid**2 + 2*vid + 25 + random.randint(0,10000)
+        ind = v % M
+        ind = self.check_next( ind )
+        if(ind == -1):
+            return "No slots are empty"     #need to extend
+        self.slot[ind].append(serid)
+        self.slot[ind].append(vid)
+
