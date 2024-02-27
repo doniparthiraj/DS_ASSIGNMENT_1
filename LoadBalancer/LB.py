@@ -4,6 +4,8 @@ import subprocess
 import requests
 import random
 from consistent_hash import ConsistentHash as CH
+from threading import Thread
+import time
 
 app = Flask(__name__)
 
@@ -11,6 +13,21 @@ hash = CH()
 All_servers = {}
 DOCKER_IMAGE_NAME = "flaskserver"
 DOCKER_API_VERSION = "3.9"
+
+def continuous_server_check():
+    while(True):
+        if bool(All_servers) == False:
+            time.sleep(10)
+            continue
+        for ser_name in list(All_servers.keys()):
+            if checkHeartbeat(ser_name) != 200:
+                spawn_new_server(ser_name)
+        time.sleep(2)
+
+server_check_thread = Thread(target=continuous_server_check)
+server_check_thread.daemon = True  # Daemonize the thread so it will exit when the main thread exits
+server_check_thread.start()
+
 
 def generateId():
     while True:
@@ -56,7 +73,7 @@ def removeServer(server_name):
     All_servers.pop(server_name) #removing from dict
     res = os.system(f'sudo docker stop {server_name} && sudo docker rm {server_name}')
     if res > 0:
-        return jsonify({"message" : f"{server} not found","status" : "failure"}),400
+        return jsonify({"message" : f"{server_name} not found","status" : "failure"}),400
 
 def spawn_new_server(server_name):
     hash.rem_server(All_servers[server_name])
@@ -67,7 +84,7 @@ def spawn_new_server(server_name):
     start_new_server(new_server)
 
 #gets the server for client using hash 
-def get_avail_serv(cli_id, max_attempts = 2):
+def get_avail_serv(cli_id, max_attempts = 10):
     attempts = 0
     while attempts < max_attempts:
         get_ser_name = hash.reqhash(int(cli_id))
@@ -75,7 +92,7 @@ def get_avail_serv(cli_id, max_attempts = 2):
             if checkHeartbeat(get_ser_name) == 200: #used to see the server is alive or not and returns if avaliable
                 return get_ser_name
             else:
-                spawn_new_server(get_ser_name)#removes the stopped server and spawns a newserver
+                time.sleep(2)
         attempts += 1
 
     raise Exception("No available servers after multiple attempts")
@@ -83,10 +100,10 @@ def get_avail_serv(cli_id, max_attempts = 2):
 
 @app.route('/<path>',methods=["GET"])
 def path_redirect(path):    
-    if path == 'home':
+    if path == 'home' or path == 'heartbeat':
         cli_id = request.args.get('id')
         server_name = get_avail_serv(cli_id)
-        response = requests.get(f"http://{server_name}:5000/home?id={server_name}")
+        response = requests.get(f"http://{server_name}:5000/{path}?id={server_name}")
         return jsonify(response.json())
     elif path == 'rep':
         # print("rep")
