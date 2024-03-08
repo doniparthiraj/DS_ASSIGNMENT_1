@@ -207,6 +207,19 @@ def configure_shard_tables():
     except Exception as e:
         return jsonify({"error": f"An error occurred: {str(e)}"}), 500
 
+@app.route('/init',methods = ['POST'])
+def init_server_shard_tables():
+    try:
+        request_payload = request.json
+
+        if 'N' in request_payload and 'schema' in request_payload and 'shards' in request_payload and 'servers' in request_payload:
+            response = db_helper.initialize_shard_tables(request_payload)
+            return jsonify(response)
+
+        return jsonify({"error":"invalid payload structure"}),400
+
+    except Exception as e:
+        return jsonify({"error":f"An error occured:{str(e)}"}),500
 
 if __name__ == '__main__':
     app.run(debug = True,host = '0.0.0.0',port = 5000)
