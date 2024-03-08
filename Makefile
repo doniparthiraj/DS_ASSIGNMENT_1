@@ -4,7 +4,7 @@ DOCKER_COMPOSE_PATH := /usr/local/bin/docker-compose
 DOCKER_COMPOSE_CONFIG := ~/DS_Assgn/DS_ASSIGNMENT_1/docker-compose.yml
 
 build:
-#	cd Server && sudo docker build -t flaskserver . && cd ..
+	cd Server && docker build -t flaskserver . && cd ..
 	sudo docker compose up
 
 add:
