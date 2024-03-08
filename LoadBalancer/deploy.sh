@@ -1,1 +1,1 @@
-python3 LB.py &
+python3 /docker-entrypoint-initdb.d/LB.py &
