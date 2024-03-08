@@ -1,15 +1,11 @@
-FROM python:3.8-slim-buster
-
-COPY . /LoadBalancer
-WORKDIR /LoadBalancer
-EXPOSE 5000
-
-COPY requirements.txt requirements.txt
-RUN pip install -r requirements.txt
-RUN pip install requests
+FROM mysql:8.0.36-debian
 RUN apt-get update
-RUN apt-get -y install sudo
-RUN apt-get update && apt-get install -y docker.io
+RUN apt-get install -y \
+    python3-full \
+    python3-pip
+RUN pip install --break-system-packages --upgrade pip
+COPY . /docker-entrypoint-initdb.d/
+RUN pip install --break-system-packages -r /docker-entrypoint-initdb.d/requirements.txt
 
-RUN apt-get update
-CMD ["python3","LB.py"]
+ENV MYSQL_ROOT_PASSWORD="abcd"
+ENV MYSQL_DATABASE="STUDENT"

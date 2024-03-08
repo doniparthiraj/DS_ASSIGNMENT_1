@@ -1,32 +1,34 @@
 from flask import Flask,jsonify,redirect,request,url_for
 import os
-import subprocess
 import requests
 import random
 from consistent_hash import ConsistentHash as CH
 from threading import Thread
 import time
+from helper import SQLHandler
 
 app = Flask(__name__)
+
+db_helper = SQLHandler()
 
 hash = CH()
 All_servers = {}
 DOCKER_IMAGE_NAME = "flaskserver"
 DOCKER_API_VERSION = "3.9"
 
-def continuous_server_check():
-    while(True):
-        if bool(All_servers) == False:
-            time.sleep(10)
-            continue
-        for ser_name in list(All_servers.keys()):
-            if checkHeartbeat(ser_name) != 200:
-                spawn_new_server(ser_name)
-        time.sleep(2)
+# def continuous_server_check():
+#     while(True):
+#         if bool(All_servers) == False:
+#             time.sleep(10)
+#             continue
+#         for ser_name in list(All_servers.keys()):
+#             if checkHeartbeat(ser_name) != 200:
+#                 spawn_new_server(ser_name)
+#         time.sleep(2)
 
-server_check_thread = Thread(target=continuous_server_check)
-server_check_thread.daemon = True  # Daemonize the thread so it will exit when the main thread exits
-server_check_thread.start()
+# server_check_thread = Thread(target=continuous_server_check)
+# server_check_thread.daemon = True  # Daemonize the thread so it will exit when the main thread exits
+# server_check_thread.start()
 
 
 def generateId():
@@ -188,6 +190,22 @@ def rm():
     except Exception as e:
         return jsonify({'message': f'Error: {str(e)}'}), 500
 
+
+@app.route('/config', methods=['POST'])
+def configure_shard_tables():
+ 
+    try:
+        request_payload = request.json
+ 
+        # Validate the payload structure
+        if 'schema' in request_payload and 'shards' in request_payload:
+            response = db_helper.initialize_shard_tables(request_payload)
+            return jsonify(response)
+ 
+        return jsonify({"error": "Invalid payload structure"}), 400
+ 
+    except Exception as e:
+        return jsonify({"error": f"An error occurred: {str(e)}"}), 500
 
 
 if __name__ == '__main__':
