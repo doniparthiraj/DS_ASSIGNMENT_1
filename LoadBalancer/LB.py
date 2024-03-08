@@ -191,21 +191,24 @@ def rm():
         return jsonify({'message': f'Error: {str(e)}'}), 500
 
 
-@app.route('/config', methods=['POST'])
-def configure_shard_tables():
+@app.route('/init', methods=['POST'])
+def init():
+    data = request.json
+    response = requests.post(f"http://S1:5000/config?id=89",json=data)
+    return jsonify(response.json())
+    
+    # try:
+    #     request_payload = request.json
  
-    try:
-        request_payload = request.json
+    #     # Validate the payload structure
+    #     if 'schema' in request_payload and 'shards' in request_payload:
+    #         response = db_helper.initialize_shard_tables(request_payload)
+    #         return jsonify(response)
  
-        # Validate the payload structure
-        if 'schema' in request_payload and 'shards' in request_payload:
-            response = db_helper.initialize_shard_tables(request_payload)
-            return jsonify(response)
+    #     return jsonify({"error": "Invalid payload structure"}), 400
  
-        return jsonify({"error": "Invalid payload structure"}), 400
- 
-    except Exception as e:
-        return jsonify({"error": f"An error occurred: {str(e)}"}), 500
+    # except Exception as e:
+    #     return jsonify({"error": f"An error occurred: {str(e)}"}), 500
 
 @app.route('/init',methods = ['POST'])
 def init_server_shard_tables():

@@ -1,33 +1,50 @@
-import mysql.connector as con
+import mysql.connector
 
-db_config = {
-   
-    'host': 'lb_server',
-    'user': 'root',
-    'password': 'abcd',
-    'database': 'STUDENT',
-    'port' : 3306
-}
 
 class SQLHandler:
-    def __init__(self):
-        self.connection = None
-        
-    def connect_to_database(self):
-        try:
-            self.connection = con.connect(**db_config)
-        except con.Error as e:
-            print("Error connecting to MySQL database:", e)
+    def __init__(self,host='localhost',user='root',password='abc',db='dQdb'):
+        self.host=host
+        self.user=user
+        self.password=password
+        self.db=db
+
+    def connect(self):
+        connected=False
+        while not connected:
+            try:
+                self.mydb = mysql.connector.connect(host=self.host,user=self.user,password=self.password)
+                self.UseDB(self.db)
+                connected=True
+            except Exception:
+                pass
     
-    def initialize_shard_tables(self, payload):
-        if self.connection is None:
-            self.connect_to_database()  # Ensure connection is established
-            if self.connection is None:
-                return "Error: Connection to database failed."
-        
+    def query(self, sql):
         try:
-            cursor = self.connection.cursor()
-        
+            cursor = self.mydb.cursor()
+            cursor.execute(sql)
+        except Exception:
+            self.connect()
+            cursor = self.mydb.cursor()
+            cursor.execute(sql)
+        res=cursor.fetchall()
+        cursor.close()
+        self.mydb.commit()
+        return res
+
+    def UseDB(self,dbname=None):
+        res=self.query("SHOW DATABASES")
+        if dbname not in [r[0] for r in res]:
+            self.query(f"CREATE DATABASE {dbname}")
+        self.query(f"USE {dbname}")
+
+    def DropDB(self,dbname=None):
+        res=self.query("SHOW DATABASES")
+        if dbname in [r[0] for r in res]:
+            self.query(f"DROP DATABASE {dbname}")
+
+    def initialize_shard_tables(self, payload):
+        self.connect()
+        try:        
             # Extract schema and shards from the payload
             schema = payload.get('schema', {})
             columns = schema.get('columns', [])
@@ -45,41 +62,9 @@ class SQLHandler:
                 '''
     
                 print(create_table_query,flush=True)
-                cursor.execute(create_table_query)
- 
-            self.connection.commit()
- 
-            return {"message": "Shard tables initialized successfully"}
+                self.query(create_table_query) 
+            return {"message": "Shard tables initialized successfully"},200
     
         except Exception as e:
-            return {"error": f"An error occurred: {str(e)}"}
-
-    # Other database operations here...
-    def insert_data(self, data):
-        try:
-            cursor = self.connection.cursor()
-            cursor.execute("INSERT INTO your_table_name (column_name) VALUES (%s)", (data,))
-            self.connection.commit()
-            print("Data inserted successfully")
-            cursor.close()
-        except mysql.connector.Error as e:
-            print("Error inserting data:", e)
-
-    def fetch_data(self):
-        try:
-            cursor = self.connection.cursor()
-            cursor.execute("SELECT * FROM your_table_name")
-            rows = cursor.fetchall()
-            print("Fetched data:")
-            for row in rows:
-                print(row)
-            cursor.close()
-        except mysql.connector.Error as e:
-            print("Error fetching data:", e)
-
-    def close_connection(self):
-        try:
-            self.connection.close()
-            print("Connection closed")
-        except mysql.connector.Error as e:
-            print("Error closing connection:", e)
+            return {"error": f"An error occurred: {str(e)}"},500
+    
