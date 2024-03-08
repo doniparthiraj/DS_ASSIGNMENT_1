@@ -1,25 +1,29 @@
 FROM mysql:8.0-debian
+
 COPY deploy.sh /always-initdb.d/
-COPY . /Server
-WORKDIR /Server
+COPY . /ser
+WORKDIR /ser
 
-RUN apt-get update && apt-get install -y python3 python3-pip python3-venv
+RUN apt-get update
+RUN apt-get install -y \
+    python3-full \
+    python3-pip
+RUN pip install --break-system-packages --upgrade pip
 
-# Create a virtual environment
-RUN python3 -m venv /venv
+RUN pip install --break-system-packages -r requirements.txt
+RUN chmod +x /ser/custom-entry.sh
 
-# Activate the virtual environment
-ENV PATH="/venv/bin:$PATH"
+ENV USER=theuser
+RUN adduser --home /home/$USER --disabled-password --gecos GECOS $USER \
+  && chsh -s /bin/zsh $USER
+RUN touch /ser/topicLog.db
+RUN chown $USER /ser/topicLog.db
 
+USER $USER
+ENV HOME=/home/$USER
+ENV MYSQL_ROOT_PASSWORD="abc"
 
 EXPOSE 5000
 
-COPY requirements.txt requirements.txt
-RUN /venv/bin/pip install -r requirements.txt
-RUN /venv/bin/pip install requests
-RUN apt-get update
-RUN apt-get -y install sudo
-RUN apt-get update && apt-get install -y docker.io
-
-RUN apt-get update
-ENV MYSQL_ROOT_PASSWORD="abc" 
+ENTRYPOINT ["/ser/custom-entry.sh"]
+CMD ["mysqld"]
