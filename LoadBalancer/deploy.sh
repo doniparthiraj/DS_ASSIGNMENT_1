@@ -1,2 +1,3 @@
-#!/bin/bash
-python3 /LoadBalancer/LB.py &
+
+python3 /docker-entrypoint-initdb.d/LB.py &
+
