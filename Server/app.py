@@ -28,7 +28,7 @@ def config():
     db_helper.connect()
     try:
         request_payload = request.json
- 
+        print(request_payload,flush = True)
         # Validate the payload structure
         if 'schema' in request_payload and 'shards' in request_payload:
             response = db_helper.initialize_shard_tables(request_payload)

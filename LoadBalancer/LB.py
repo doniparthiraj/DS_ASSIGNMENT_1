@@ -99,6 +99,11 @@ def get_avail_serv(cli_id, max_attempts = 10):
 
     raise Exception("No available servers after multiple attempts")
 
+def get_server_info(data, server_name):
+        server_info = {}
+        server_info['schema'] = data['schema']
+        server_info['shards'] = [shard_id for shard_id in data['servers'][server_name]]
+        return server_info
 
 @app.route('/<path>',methods=["GET"])
 def path_redirect(path):    
@@ -131,30 +136,68 @@ def path_redirect(path):
 @app.route('/add',methods=["POST"])
 def add():
     try:
-        data = request.get_json()
-        n = data.get('n')
-        hostnames = data.get('hostnames')
-        if n < len(hostnames):
-            return jsonify({"message" : "<Error> Length of hostname list is more than newly added instances","status" : "failure"}),400
-        elif n is not None and hostnames is not None and isinstance(hostnames, list):
-            for server_name in hostnames:
-                start_new_server(server_name)
-            #randomly add a server name if n > len(hostnames)
-            length = len(hostnames)
-            for _ in range(n-length):
-                server_name = create_server_name()
-                hostnames.append(server_name)
-                start_new_server(server_name)
+        # data = request.get_json()
+        # n = data.get('n')
+        # hostnames = data.get('hostnames')
+        # if n < len(hostnames):
+        #     return jsonify({"message" : "<Error> Length of hostname list is more than newly added instances","status" : "failure"}),400
+        # elif n is not None and hostnames is not None and isinstance(hostnames, list):
+        #     for server_name in hostnames:
+        #         start_new_server(server_name)
+        #     #randomly add a server name if n > len(hostnames)
+        #     length = len(hostnames)
+        #     for _ in range(n-length):
+        #         server_name = create_server_name()
+        #         hostnames.append(server_name)
+        #         start_new_server(server_name)
 
+        #     return jsonify({
+        #         'message': {
+        #             "N": n,  
+        #             "replicas": [server for server in hostnames]
+        #                 },
+        #                 "status": "successful"
+        #             }), 200 
+        # else:
+        #     return jsonify({'message': 'Invalid request, missing or incorrect parameters'}), 400
+        data = request.json
+        n = data.get('n')
+        new_shards = data.get('new_shards',[])
+        servers = data.get('servers',{})
+        new_servers = {}
+        if len(servers) >= n:
+            for key,val in servers.items():
+                if '[' in key or ']' in key:
+                    random_ser_name = 'Server'+str(random.randint(0,10000))
+                    if random_ser_name not in All_servers:
+                        new_servers[random_ser_name] = val
+                        start_new_server(random_ser_name)
+                else:
+                    start_new_server(key)
+                    new_servers[key] = val
+        
+            for shard in new_shards:
+                res = db_helper.add_shard_table(shard['Stud_id_low'],shard['Shard_id'],shard['Shard_size'],shard['Stud_id_low'])
+            
+            message = "Add "
+            for key,val in new_servers.items():
+                for v in val:
+                    res = db_helper.add_map_table(val,key)
+                message += key 
+                message += " ,"
+            message = message[:-1]
+            
             return jsonify({
-                'message': {
-                    "N": n,  
-                    "replicas": [server for server in hostnames]
-                        },
-                        "status": "successful"
-                    }), 200 
+                'N' : len(All_servers),
+                'message':message,
+                'status':'successful'
+            }),200
+            
         else:
-            return jsonify({'message': 'Invalid request, missing or incorrect parameters'}), 400
+            return jsonify({'message':'<Error> Number of new servers (n) is greater than newly added instances',
+            'status':'failure'}),400
+        
+
     except Exception as e:
         return jsonify({'message': f'Error: {str(e)}'}), 500
 
@@ -193,37 +236,62 @@ def rm():
 
 @app.route('/init', methods=['POST'])
 def init():
-    data = request.json
-    response = requests.post(f"http://S1:5000/config?id=89",json=data)
-    return jsonify(response.json())
-    
-    # try:
-    #     request_payload = request.json
- 
-    #     # Validate the payload structure
-    #     if 'schema' in request_payload and 'shards' in request_payload:
-    #         response = db_helper.initialize_shard_tables(request_payload)
-    #         return jsonify(response)
- 
-    #     return jsonify({"error": "Invalid payload structure"}), 400
- 
-    # except Exception as e:
-    #     return jsonify({"error": f"An error occurred: {str(e)}"}), 500
-
-@app.route('/init',methods = ['POST'])
-def init_server_shard_tables():
     try:
-        request_payload = request.json
+        data = request.json
+        res= db_helper.initialize_shard_map_table(data)
+        # if status == 200:
+        #     response = requests.post(f"http://S1:5000/config?id=89",json=data)
+        #     return jsonify(response.json())
+        shard_ids = [shard['Shard_id'] for shard in data['shards']]
+        servers = data['servers']
+        for ser in servers:
+            info = get_server_info(data,ser) 
+            shards_info = info['shards']  
+            shard_ids = [x for x in shard_ids if x not in shards_info] 
+            # print(info,flush = True)
+            response = requests.post(f"http://{ser}:5000/config?id=89",json=info)
 
-        if 'N' in request_payload and 'schema' in request_payload and 'shards' in request_payload and 'servers' in request_payload:
-            response = db_helper.initialize_shard_tables(request_payload)
-            return jsonify(response)
+        #print("shardids:",shard_ids,flush = True)
+        if len(shard_ids) != 0 :
+            #then we need to randomly allocate some servers for the shards.
+            for shard in shard_ids:
+                random_ser = random.choice(list(All_servers.keys()))
+                server_info = {}
+                server_info['schema'] = data['schema']
+                server_info['shards'] = [shard]
+                
+                res = db_helper.add_map_table(shard,random_ser)
+                print(res,flush = True)
+                #print(server_info,random_ser,flush = True)
+                response = requests.post(f"http://{random_ser}:5000/config?id=89",json=server_info)
 
-        return jsonify({"error":"invalid payload structure"}),400
+
+        return jsonify({
+            'message' : "Configured Database"
+        }),200
+    except Exception as e:
+        return jsonify({'message':f'Error :{str(e)}'}),500
+
+
+@app.route('/status',methods = ['GET'])
+def status():
+    try:
+        serv = {}
+        for ser in All_servers:
+            serv[ser] = []
+        shards,servers = db_helper.get_status(serv)
+        schema = {"columns":["Stud_id","Stud_name","Stud_marks"],
+                  "dtypes":["Number","String","String"]}#checkcorrectmethd for schema
+        return jsonify({
+                'N':len(All_servers),
+                'schema':schema,
+                'shards':shards,
+                'servers':servers
+
+        }),200
 
     except Exception as e:
-        return jsonify({"error":f"An error occured:{str(e)}"}),500
-
+        return jsonify({'message':f'Error :{str(e)}'}),500
 if __name__ == '__main__':
     app.run(debug = True,host = '0.0.0.0',port = 5000)
 
