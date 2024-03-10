@@ -5,7 +5,9 @@ import random
 from consistent_hash import ConsistentHash as CH
 from threading import Thread
 import time
+
 from helper import SQLHandler
+
 
 app = Flask(__name__)
 
@@ -15,6 +17,7 @@ hash = CH()
 All_servers = {}
 DOCKER_IMAGE_NAME = "flaskserver"
 DOCKER_API_VERSION = "3.9"
+
 
 # def continuous_server_check():
 #     while(True):
@@ -29,6 +32,7 @@ DOCKER_API_VERSION = "3.9"
 # server_check_thread = Thread(target=continuous_server_check)
 # server_check_thread.daemon = True  # Daemonize the thread so it will exit when the main thread exits
 # server_check_thread.start()
+
 
 
 def generateId():
