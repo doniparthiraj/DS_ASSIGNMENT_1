@@ -72,6 +72,8 @@ def checkHeartbeat(server_name):
 
 def removeServer(server_name):
     hash.rem_server(All_servers[server_name])
+    print("rmove",flush = True)
+    res = db_helper.remove_server(server_name)
     All_servers.pop(server_name) #removing from dict
     res = os.system(f'sudo docker stop {server_name} && sudo docker rm {server_name}')
     if res > 0:
@@ -99,11 +101,14 @@ def get_avail_serv(cli_id, max_attempts = 10):
 
     raise Exception("No available servers after multiple attempts")
 
-def get_server_info(data, server_name):
-        server_info = {}
-        server_info['schema'] = data['schema']
-        server_info['shards'] = [shard_id for shard_id in data['servers'][server_name]]
-        return server_info
+def add_servers(servers):
+    try:
+        for server_name in servers:
+            start_new_server(server_name)
+        return 'success'
+    except Exception as e:
+        return jsonify({'message': f'Error: {str(e)}'}), 500
+
 
 @app.route('/<path>',methods=["GET"])
 def path_redirect(path):    
@@ -136,60 +141,48 @@ def path_redirect(path):
 @app.route('/add',methods=["POST"])
 def add():
     try:
-        # data = request.get_json()
-        # n = data.get('n')
-        # hostnames = data.get('hostnames')
-        # if n < len(hostnames):
-        #     return jsonify({"message" : "<Error> Length of hostname list is more than newly added instances","status" : "failure"}),400
-        # elif n is not None and hostnames is not None and isinstance(hostnames, list):
-        #     for server_name in hostnames:
-        #         start_new_server(server_name)
-        #     #randomly add a server name if n > len(hostnames)
-        #     length = len(hostnames)
-        #     for _ in range(n-length):
-        #         server_name = create_server_name()
-        #         hostnames.append(server_name)
-        #         start_new_server(server_name)
-
-        #     return jsonify({
-        #         'message': {
-        #             "N": n,  
-        #             "replicas": [server for server in hostnames]
-        #                 },
-        #                 "status": "successful"
-        #             }), 200 
-        # else:
-        #     return jsonify({'message': 'Invalid request, missing or incorrect parameters'}), 400
         data = request.json
         n = data.get('n')
         new_shards = data.get('new_shards',[])
         servers = data.get('servers',{})
         new_servers = {}
+        name_check = lambda s: all(char.isalnum() or char == '_' for char in s)
         if len(servers) >= n:
             for key,val in servers.items():
-                if '[' in key or ']' in key:
-                    random_ser_name = 'Server'+str(random.randint(0,10000))
-                    if random_ser_name not in All_servers:
-                        new_servers[random_ser_name] = val
-                        start_new_server(random_ser_name)
-                else:
-                    start_new_server(key)
-                    new_servers[key] = val
-        
+                ser_name = key
+                if not name_check(ser_name):
+                    ser_name = create_server_name()
+                start_new_server(ser_name)
+                new_servers[ser_name] = val
+    
             for shard in new_shards:
                 res = db_helper.add_shard_table(shard['Stud_id_low'],shard['Shard_id'],shard['Shard_size'],shard['Stud_id_low'])
             
-            message = "Add "
             for key,val in new_servers.items():
                 for v in val:
-                    res = db_helper.add_map_table(val,key)
-                message += key 
-                message += " ,"
-            message = message[:-1]
+                    res = db_helper.add_map_table(v,key)
             
+            for ser in new_servers.keys():
+                info = {
+                    'schema':{
+                        "columns":["Stud_id","Stud_name","Stud_marks"],
+                        "dtypes":["Number","String","String"]
+                        },
+                    'shards':new_servers[ser]
+                }
+                
+                print(ser,info,flush = True)
+                time.sleep(7)
+                response = requests.post(f"http://{ser}:5000/config",json=info)
+                if response.status_code == 200:
+                    print("Request to", ser, "was successful")
+                else:
+                    print("Request to", ser, "failed with status code:", response.status_code)
+            
+            message = f'Add {", ".join(new_servers.keys())}'
             return jsonify({
                 'N' : len(All_servers),
-                'message':message,
+                'message': message,
                 'status':'successful'
             }),200
             
@@ -205,15 +198,17 @@ def add():
 @app.route('/rm',methods=["DELETE"])
 def rm():
     try:
-        data = request.get_json()
+        data = request.json
         n = data.get('n')
-        hostnames = data.get('hostnames')
+        hostnames = data.get('servers',[])
+        deleted_servers = []
         if n < len(hostnames):
-            return jsonify({"message" : "<Error> Length of hostname list is more than removable instances","status" : "failure"}),400
+            return jsonify({"message" : "<Error> Length of servers list is more than removable instances"}),400
         elif n >= len(hostnames):
             for server in hostnames:
                 if server != 'lb_server':
                     removeServer(server)
+                    deleted_servers.append(server)
                 else:
                     return jsonify({"message" : "Permission Denied","status" : "failure"}),400
             for _ in range( n - len(hostnames) ):
@@ -221,40 +216,50 @@ def rm():
                 if len(result) > 0: #checking if containers are available or not for removing
                     random_server = result[0]
                     removeServer(random_server)
+                    deleted_servers.append(random_server)
 
             return jsonify({
                 'message': {
                     "N": len(All_servers),  
-                    "replicas": [server for server in All_servers.keys()]
-                        },
-                        "status": "successful"
+                    "servers": deleted_servers
+                        }
                     }), 200
 
     except Exception as e:
-        return jsonify({'message': f'Error: {str(e)}'}), 500
+        return jsonify({'message': f'rmError: {str(e)}'}), 500
 
 
 @app.route('/init', methods=['POST'])
 def init():
     try:
         data = request.json
-        res= db_helper.initialize_shard_map_table(data)
-        # if status == 200:
-        #     response = requests.post(f"http://S1:5000/config?id=89",json=data)
-        #     return jsonify(response.json())
-        shard_ids = [shard['Shard_id'] for shard in data['shards']]
-        servers = data['servers']
-        for ser in servers:
-            info = get_server_info(data,ser) 
-            shards_info = info['shards']  
-            shard_ids = [x for x in shard_ids if x not in shards_info] 
-            # print(info,flush = True)
-            response = requests.post(f"http://{ser}:5000/config?id=89",json=info)
 
-        #print("shardids:",shard_ids,flush = True)
-        if len(shard_ids) != 0 :
+        servers = data['servers'].keys()
+        add_servers(servers)
+
+        shard_all = [shard['Shard_id'] for shard in data['shards']]
+
+        db_helper.initialize_shard_map_table(data)
+        shards_present = []
+        for ser in servers:
+            info = {
+                'schema' : data['schema'],
+                'shards' : data['servers'][ser]
+            }
+            shards_present.extend(info['shards']) 
+            print(ser,info,flush = True)
+            time.sleep(7)
+            response = requests.post(f"http://{ser}:5000/config", json=info)
+            if response.status_code == 200:
+                print("Request to", ser, "was successful")
+            else:
+                print("Request to", ser, "failed with status code:", response.status_code)
+
+        shard_absent = [x for x in shard_all if x not in shards_present]
+        print("shardabsents:",shard_absent,flush = True)
+        if len(shard_absent) != 0 :
             #then we need to randomly allocate some servers for the shards.
-            for shard in shard_ids:
+            for shard in shard_absent:
                 random_ser = random.choice(list(All_servers.keys()))
                 server_info = {}
                 server_info['schema'] = data['schema']
@@ -262,8 +267,8 @@ def init():
                 
                 res = db_helper.add_map_table(shard,random_ser)
                 print(res,flush = True)
-                #print(server_info,random_ser,flush = True)
-                response = requests.post(f"http://{random_ser}:5000/config?id=89",json=server_info)
+                
+                response = requests.post(f"http://{random_ser}:5000/config",json=server_info)
 
 
         return jsonify({
@@ -276,10 +281,8 @@ def init():
 @app.route('/status',methods = ['GET'])
 def status():
     try:
-        serv = {}
-        for ser in All_servers:
-            serv[ser] = []
-        shards,servers = db_helper.get_status(serv)
+        serv_status = {key: [] for key in All_servers.keys()}
+        shards,servers = db_helper.get_status(serv_status)
         schema = {"columns":["Stud_id","Stud_name","Stud_marks"],
                   "dtypes":["Number","String","String"]}#checkcorrectmethd for schema
         return jsonify({
@@ -292,6 +295,20 @@ def status():
 
     except Exception as e:
         return jsonify({'message':f'Error :{str(e)}'}),500
+
+@app.route('/read',methods = ['POST'])
+def read():
+    try:
+        data = request.json
+        low = data['Stud_id']['low']
+        high = data['Stud_id']['high']
+        print(low,high,flush=True)
+        shards_req = db_helper.shards_required(low,high)
+        print(shards_req,flush=True)
+        return ' ',200
+    except Exception as e:
+        return jsonify({'message':f'Error :{str(e)}'}),500
+
 if __name__ == '__main__':
     app.run(debug = True,host = '0.0.0.0',port = 5000)
 

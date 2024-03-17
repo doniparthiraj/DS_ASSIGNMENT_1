@@ -42,18 +42,23 @@ class SQLHandler:
         if dbname in [r[0] for r in res]:
             self.query(f"DROP DATABASE {dbname}")
 
-    def insert_query(self,sql,val):
+    def update_query(self, sql, val):
         try:
             cursor = self.mydb.cursor()
-            cursor.execute(sql,val)
-        except Exception:
+            cursor.execute(sql, val)
+            res = cursor.fetchall()
+            self.mydb.commit()  # Commit changes before fetching results
+            cursor.close()
+            return res
+        except mysql.connector.Error as err:
+            print(f"upError: {err}")
             self.connect()
             cursor = self.mydb.cursor()
-            cursor.execute(sql,val)
-        res=cursor.fetchall()
-        cursor.close()
-        self.mydb.commit()
-        return res
+            cursor.execute(sql, val)
+            self.mydb.commit()
+            res = cursor.fetchall()
+            cursor.close()
+            return res
 
     def get_status(self,servers):
         try:
@@ -75,12 +80,21 @@ class SQLHandler:
         except Exception as e:
             return {"error": f"An error occurred: {str(e)}"},500
 
+    def get_all(self):
+        try:
+            self.connect()
+            res = self.query("Select * from ShardT_Schema")
+            res1 = self.query("Select * from MapT_Schema")
+            return res,res1
+        except Exception as e:
+            return {"error": f"An error occurred: {str(e)}"},500
     def add_map_table(self,shard,ser):
         try:
             self.connect()
             insert_map_query = "INSERT INTO MapT_Schema (Shard_id,Server_id) VALUES (%s , %s)"
-            values = (shard,ser)
-            self.insert_query(insert_map_query,values)
+            values = (shard,ser)    
+            self.update_query(insert_map_query,values)
+            print("Inserted",values)
             return  {"message":"Comfigured database"},200
         except Exception as e:
             return {"error": f"An error occurred: {str(e)}"},500
@@ -91,11 +105,32 @@ class SQLHandler:
             insert_shard_query = "INSERT INTO ShardT_Schema (Stud_id_low, Shard_id, Shard_size,valid_idx) VALUES (%s, %s, %s, %s)"
             values = (Stud_id_low,Shard_id,Shard_size,valid_idx)
 
-            self.insert_query(insert_map_query,values)
+            self.update_query(insert_shard_query,values)
+            print("Inserted",values)
             return  {"message":"Comfigured database"},200
         except Exception as e:
             return {"error": f"An error occurred: {str(e)}"},500
+
+    def remove_server(self, server):
+        try:
+            self.connect()
+            shards = "SELECT Shard_id from MapT_Schema where Server_id = %s"
+            resp = self.update_query(shards,(server,))
             
+            delete_map_query = "DELETE FROM MapT_Schema where Server_id = %s"
+            self.update_query(delete_map_query,(server,))
+
+            for sid in resp:
+                x = 'SELECT Server_id from MapT_Schema where Shard_id = %s'
+                q = self.update_query(x,sid)
+
+                if not q:
+                    delete_shard = "DELETE FROM ShardT_Schema where Shard_id = %s"
+                    self.update_query(delete_shard,sid)
+
+            return  {"message":"Comfigured database"},200
+        except Exception as e:
+            return {"error": f"An error occurred: {str(e)}"},500   
     def initialize_shard_map_table(self,data):
         try:
             self.connect()
@@ -120,7 +155,7 @@ class SQLHandler:
             
             for shard in shards:
                 values = (shard["Stud_id_low"], shard["Shard_id"], shard["Shard_size"],shard["Stud_id_low"])
-                self.insert_query(insert_shard_query,values)
+                self.update_query(insert_shard_query,values)
 
             res = self.query("Select * from ShardT_Schema")
             print(res,flush = True)
@@ -137,7 +172,7 @@ class SQLHandler:
                 for v in val:
                     values = (v,key)
                     # print(values,flush = True)
-                    self.insert_query(insert_map_query,values)
+                    self.update_query(insert_map_query,values)
 
             res = self.query("Select * from MapT_Schema")
             print(res,flush = True)
@@ -146,3 +181,13 @@ class SQLHandler:
         except Exception as e:
             return {"error": f"An error occurred: {str(e)}"},500
 
+    def shards_required(self, low, high):
+        try:
+            self.connect()
+            print(low,type(low),flush=True)
+            range_query ='''Select Shard_id from ShardT_Schema 
+                            where ( %s BETWEEN Stud_id_low AND valid_idx ) OR ( %s BETWEEN Stud_id_low AND valid_idx )'''
+            response = self.update_query(range_query,(low,high))
+            return response
+        except Exception as e:
+            return {"error": f"An error occurred: {str(e)}"},500
