@@ -37,6 +37,4 @@ ENV MYSQL_ROOT_PASSWORD="abc"
 EXPOSE 5000
 
 ENTRYPOINT ["/lb/custom-entry.sh"]
-
 CMD ["mysqld"]
-
