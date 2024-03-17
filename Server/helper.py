@@ -1,4 +1,3 @@
-import mysql.connector
 from flask import Flask,jsonify,redirect,request
 
 
@@ -66,6 +65,7 @@ class SQLHandler:
     
                 print(create_table_query,flush=True)
                 self.query(create_table_query) 
+
                 response_string = response_string+server_name+": "+shard+" "
             return jsonify({
                 'message': {
