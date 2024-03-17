@@ -215,6 +215,35 @@ def init():
     #     return jsonify({"error": f"An error occurred: {str(e)}"}), 500
 
 
+@app.route('/config',methods=['POST'])
+def config():
+    data = request.json
+    server_name = "s1"
+    data['server_name'] = server_name
+    response = requests.post(f"http://{server_name}:5000/config?id=11",json=data)
+    return jsonify(response.json())
+
+@app.route('/read',methods=['POST'])
+def read():
+    req_data = request.json
+    server_name = "s1"
+    response = requests.post(f"http://{server_name}:5000/read?id=5",json=req_data)
+    return jsonify(response.json())
+
+@app.route('/write',methods=['POST'])
+def write():
+    req_data = request.json
+    server_name = "s1"
+    response = requests.post(f"http://{server_name}:5000/write?id=2",json=req_data)
+    return jsonify(response.json())
+
+@app.route('/update',methods=['POST'])
+def update():
+    req_data = request.json
+    server_name = "s1"
+    response = requests.post(f"http://{server_name}:5000/update?id=3",json=req_data)
+    return jsonify(response.json())
+
 if __name__ == '__main__':
     app.run(debug = True,host = '0.0.0.0',port = 5000)
 
