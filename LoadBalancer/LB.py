@@ -12,6 +12,7 @@ from helper import SQLHandler
 app = Flask(__name__)
 
 db_helper = SQLHandler()
+# shard_hash = {}
 
 hash = CH()
 All_servers = {}
@@ -177,7 +178,7 @@ def add():
                 
                 print(ser,info,flush = True)
                 time.sleep(7)
-                response = requests.post(f"http://{ser}:5000/config",json=info)
+                response = requests.post(f"http://{ser}:5000/config?id={ser}",json=info)
                 if response.status_code == 200:
                     print("Request to", ser, "was successful")
                 else:
@@ -253,7 +254,7 @@ def init():
             shards_present.extend(info['shards']) 
             print(ser,info,flush = True)
             time.sleep(7)
-            response = requests.post(f"http://{ser}:5000/config", json=info)
+            response = requests.post(f"http://{ser}:5000/config?id={ser}", json=info)
             if response.status_code == 200:
                 print("Request to", ser, "was successful")
             else:
@@ -268,11 +269,10 @@ def init():
                 server_info = {}
                 server_info['schema'] = data['schema']
                 server_info['shards'] = [shard]
-                
                 res = db_helper.add_map_table(shard,random_ser)
                 print(res,flush = True)
                 
-                response = requests.post(f"http://{random_ser}:5000/config",json=server_info)
+                response = requests.post(f"http://{random_ser}:5000/config?id={random_ser}",json=server_info)
 
         return jsonify({
             'message' : "Configured Database"

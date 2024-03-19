@@ -1,4 +1,5 @@
 from flask import Flask,jsonify,redirect,request
+import mysql.connector
 
 
 class SQLHandler:
@@ -42,7 +43,7 @@ class SQLHandler:
         if dbname in [r[0] for r in res]:
             self.query(f"DROP DATABASE {dbname}")
 
-    def initialize_shard_tables(self, payload):
+    def initialize_shard_tables(self, payload, server_name):
         self.connect()
         try:        
             # Extract schema and shards from the payload
@@ -50,7 +51,6 @@ class SQLHandler:
             columns = schema.get('columns', [])
             dtypes = schema.get('dtypes', [])
             shards = payload.get('shards', [])
-            server_name = payload.get('server_name', "None")
 
             response_string = ""
             # Create shard tables in the database

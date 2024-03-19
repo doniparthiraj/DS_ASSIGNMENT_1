@@ -22,27 +22,12 @@ def heartbeat():
         'code' : 200
     }
     return jsonify(response)
-@app.route('/config', methods=['POST'])
-def config():
-    data = request.json 
-    db_helper.connect()
-    try:
-        request_payload = request.json
-        print(request_payload,flush = True)
-        # Validate the payload structure
-        if 'schema' in request_payload and 'shards' in request_payload:
-            response = db_helper.initialize_shard_tables(request_payload)
-            return jsonify(response)
- 
-        return jsonify({"error": "Invalid payload structure"}), 400
- 
-    except Exception as e:
-        return jsonify({"error": f"An error occurred: {str(e)}"}), 500
-    return jsonify({"message": "Data received successfully"})
+
 
 @app.route('/config', methods=['POST'])
 def config():
     # data = request.json 
+    server_name = request.args.get('id')
     print("config server",flush=True)
     db_helper.connect()
     try:
@@ -50,7 +35,7 @@ def config():
  
         # Validate the payload structure
         if 'schema' in request_payload and 'shards' in request_payload:
-            response = db_helper.initialize_shard_tables(request_payload)
+            response = db_helper.initialize_shard_tables(request_payload, server_name)
             return response
  
         return jsonify({"error": "Invalid payload structure"}), 400
