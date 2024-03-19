@@ -76,4 +76,3 @@ class ConsistentHash:
             return "No slots are empty"     #need to extend
         self.slot[ind].append(serid)
         self.slot[ind].append(vid)
-
