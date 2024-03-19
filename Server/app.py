@@ -1,20 +1,6 @@
 from flask import Flask,jsonify,request
 import os
 from helper import SQLHandler
-import threading
-
-
-sh1_lock = threading.Lock()
-sh2_lock = threading.Lock()
-sh3_lock = threading.Lock()
-sh3_lock = threading.Lock()
-
-shard_locks = {
-    "sh1": sh1_lock,
-    "sh2": sh2_lock,
-    "sh3": sh3_lock,
-    "sh4": sh4_lock
-}
 
 db_helper = SQLHandler()
 
@@ -67,11 +53,8 @@ def write():
  
         # Validate the payload structure
         if 'shard' in request_payload and 'curr_idx' in request_payload and 'data' in request_payload:
-            shard_name = request_payload.get('shard', "\0")
-            lock = shard_locks.get(shard_name)
-            with lock:
-                response = db_helper.write_to_database(request_payload)
-                return response
+            response = db_helper.write_to_database(request_payload)
+            return response
  
         return jsonify({"error": "Invalid payload structure"}), 400
  
@@ -88,11 +71,8 @@ def update():
  
         # Validate the payload structure
         if 'shard' in request_payload and 'Stud_id' in request_payload and 'data' in request_payload:
-            shard_name = request_payload.get('shard', "\0")
-            lock = shard_locks.get(shard_name)
-            with lock:
-                response = db_helper.update_to_database(request_payload)
-                return response
+            response = db_helper.update_to_database(request_payload)
+            return response
  
         return jsonify({"error": "Invalid payload structure"}), 400
  
