@@ -9,7 +9,8 @@ class ConsistentHash:
         self.slot = []
         for i in range(0,M):
             self.slot.append([])
-
+    def print_slot(self):
+        print(self.slot,flush=True)
     def check_next(self, ind):
         #linear probing
         for i in range(ind,M):

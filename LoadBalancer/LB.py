@@ -12,7 +12,9 @@ from helper import SQLHandler
 app = Flask(__name__)
 
 db_helper = SQLHandler()
-# shard_hash = {}
+shard_ser = {}
+shard_hash = {}
+shard_locks = {}
 
 hash = CH()
 All_servers = {}
@@ -76,13 +78,29 @@ def checkHeartbeat(server_name):
         return 404
 
 def removeServer(server_name):
-    hash.rem_server(All_servers[server_name])
-    print("rmove",flush = True)
-    res = db_helper.remove_server(server_name)
-    All_servers.pop(server_name) #removing from dict
-    res = os.system(f'sudo docker stop {server_name} && sudo docker rm {server_name}')
-    if res > 0:
-        return jsonify({"message" : f"{server_name} not found","status" : "failure"}),400
+    try:
+        hash.rem_server(All_servers[server_name])
+        remove_server_from_shards(server_name)
+        res = db_helper.remove_server(server_name)
+        All_servers.pop(server_name) #removing from dict
+        res = os.system(f'sudo docker stop {server_name} && sudo docker rm {server_name}')
+        if res > 0:
+            return jsonify({"message" : f"{server_name} not found","status" : "failure"}),400
+    except Exception as e:
+        print('removeServer: Main server remov error: ',e,flush=True)
+        return jsonify({'message': f'Error: {str(e)}'}), 500
+
+def remove_server_from_shards(server_name):
+    try:
+        for shard, servers in shard_ser.items():
+            if server_name in servers:
+                servers.remove(server_name)
+                shard_hash[shard].rem_server(All_servers[server_name])
+                print(f"Removed {server_name} from {shard}",flush=True)
+    except Exception as e:
+        print('remov serever from shard error',e,flush=True)
+        return jsonify({'message': f'Error: {str(e)}'}), 500
+
 
 def spawn_new_server(server_name):
     hash.rem_server(All_servers[server_name])
@@ -110,8 +128,8 @@ def add_servers(servers):
     try:
         for server_name in servers:
             start_new_server(server_name)
-        return 'success'
     except Exception as e:
+        print('Error while adding servers: ',e,flush=True)
         return jsonify({'message': f'Error: {str(e)}'}), 500
 
 
@@ -123,16 +141,16 @@ def path_redirect(path):
         response = requests.get(f"http://{server_name}:5000/{path}?id={server_name}")
         return jsonify(response.json())
     elif path == 'rep':
-        # print("rep")
         res = list(All_servers.keys())
         if len(res) > 0:
-            return jsonify({
-                'message': {
-                    "N": len(res),  # Use len(res) to get the length of the 'res' list
-                    "replicas": [server for server in res]
-                },
-                "status": "successful"
-            }), 200
+            info = {
+                    'message': {
+                        "N": len(res),
+                        "replicas": [server for server in res]
+                    },
+                    "status": "successful"
+            }
+            return jsonify(info), 200
         else:
             return jsonify({'message': 'Failed to laod the replicas'}), 400
 
@@ -142,6 +160,68 @@ def path_redirect(path):
             'status' : 'failure'
         }
         return jsonify(response), 400
+
+
+@app.route('/init', methods=['POST'])
+def init():
+    try:
+        data = request.json
+
+        servers = data['servers'].keys()
+        add_servers(servers)
+        
+        shard_all = [shard['Shard_id'] for shard in data['shards']]
+
+        db_helper.initialize_shard_map_table(data)
+        shards_present = []
+        for ser in servers:
+            info = {
+                'schema' : data['schema'],
+                'shards' : data['servers'][ser]
+            }
+            shards_present.extend(info['shards']) 
+            print(ser,info,flush = True)
+            time.sleep(9)
+            response = requests.post(f"http://{ser}:5000/config?id={ser}", json=info)
+            if response.status_code == 200:
+                print("Request to", ser, "was successful")
+            else:
+                print("Request to", ser, "failed with status code:", response.status_code)
+
+        shard_absent = [x for x in shard_all if x not in shards_present]
+        print("shardabsents:",shard_absent,flush = True)
+        if len(shard_absent) != 0 :
+            #then we need to randomly allocate some servers for the shards.
+            for shard in shard_absent:
+                random_ser = random.choice(list(All_servers.keys()))
+                server_info = {}
+                server_info['schema'] = data['schema']
+                server_info['shards'] = [shard]
+                res = db_helper.add_map_table(shard,random_ser)
+                print(res,flush = True)
+                
+                response = requests.post(f"http://{random_ser}:5000/config?id={random_ser}",json=server_info)
+
+        global shard_hash
+        for ser, shard_list in data['servers'].items():
+            for x in shard_list:
+                if len(shard_hash) == 0 or x not in shard_hash:
+                    shard_hash[x] = CH()
+                shard_hash[x].add_server_hash(ser, All_servers[ser])
+                if len(shard_ser) == 0 or x not in shard_ser.keys():
+                    shard_ser[x] = []
+                shard_ser[x].append(ser)
+
+
+        print("init",shard_hash, shard_ser,flush=True)
+
+
+        return jsonify({
+            'message' : "Configured Database"
+        }),200
+    except Exception as e:
+        return jsonify({'message':f'Error :{str(e)}'}),500
+
 
 @app.route('/add',methods=["POST"])
 def add():
@@ -177,7 +257,7 @@ def add():
                 }
                 
                 print(ser,info,flush = True)
-                time.sleep(7)
+                time.sleep(10)
                 response = requests.post(f"http://{ser}:5000/config?id={ser}",json=info)
                 if response.status_code == 200:
                     print("Request to", ser, "was successful")
@@ -185,6 +265,15 @@ def add():
                     print("Request to", ser, "failed with status code:", response.status_code)
             
             message = f'Add {", ".join(new_servers.keys())}'
+            for ser, shard_list in new_servers.items():
+                for x in shard_list:
+                    if len(shard_hash) == 0 or x not in shard_hash:
+                        shard_hash[x] = CH()
+                    shard_hash[x].add_server_hash(ser, All_servers[ser])
+                    if len(shard_ser) == 0 or x not in shard_ser:
+                        shard_ser[x] = []
+                    shard_ser[x].append(ser)
+
             return jsonify({
                 'N' : len(All_servers),
                 'message': message,
@@ -221,8 +310,8 @@ def rm():
                 if len(result) > 0: #checking if containers are available or not for removing
                     random_server = result[0]
                     removeServer(random_server)
-                    deleted_servers.append(random_server)
-
+                    deleted_servers.append(random_server) 
+            print('After removing : ',All_servers,flush=True)
             return jsonify({
                 'message': {
                     "N": len(All_servers),  
@@ -232,53 +321,6 @@ def rm():
 
     except Exception as e:
         return jsonify({'message': f'rmError: {str(e)}'}), 500
-
-
-@app.route('/init', methods=['POST'])
-def init():
-    try:
-        data = request.json
-
-        servers = data['servers'].keys()
-        add_servers(servers)
-
-        shard_all = [shard['Shard_id'] for shard in data['shards']]
-
-        db_helper.initialize_shard_map_table(data)
-        shards_present = []
-        for ser in servers:
-            info = {
-                'schema' : data['schema'],
-                'shards' : data['servers'][ser]
-            }
-            shards_present.extend(info['shards']) 
-            print(ser,info,flush = True)
-            time.sleep(7)
-            response = requests.post(f"http://{ser}:5000/config?id={ser}", json=info)
-            if response.status_code == 200:
-                print("Request to", ser, "was successful")
-            else:
-                print("Request to", ser, "failed with status code:", response.status_code)
-
-        shard_absent = [x for x in shard_all if x not in shards_present]
-        print("shardabsents:",shard_absent,flush = True)
-        if len(shard_absent) != 0 :
-            #then we need to randomly allocate some servers for the shards.
-            for shard in shard_absent:
-                random_ser = random.choice(list(All_servers.keys()))
-                server_info = {}
-                server_info['schema'] = data['schema']
-                server_info['shards'] = [shard]
-                res = db_helper.add_map_table(shard,random_ser)
-                print(res,flush = True)
-                
-                response = requests.post(f"http://{random_ser}:5000/config?id={random_ser}",json=server_info)
-
-        return jsonify({
-            'message' : "Configured Database"
-        }),200
-    except Exception as e:
-        return jsonify({'message':f'Error :{str(e)}'}),500
 
 
 @app.route('/status',methods = ['GET'])
