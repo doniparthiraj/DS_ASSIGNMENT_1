@@ -3,10 +3,11 @@ import os
 import requests
 import random
 from consistent_hash import ConsistentHash as CH
-from threading import Thread
+from threading import Lock, Thread
 import time
-
+import json
 from helper import SQLHandler
+from queue import Queue
 
 
 app = Flask(__name__)
@@ -36,7 +37,29 @@ DOCKER_API_VERSION = "3.9"
 # server_check_thread.daemon = True  # Daemonize the thread so it will exit when the main thread exits
 # server_check_thread.start()
 
+class ShardReadWriteLock:
+    def __init__(self):
+        self.read_lock = Lock()
+        self.write_lock = Lock()
+        self.readers = 0
 
+    def acquire_read(self):
+        with self.read_lock:
+            self.readers += 1
+            if self.readers == 1:
+                self.write_lock.acquire()
+
+    def release_read(self):
+        with self.read_lock:
+            self.readers -= 1
+            if self.readers == 0:
+                self.write_lock.release()
+
+    def acquire_write(self):
+        self.write_lock.acquire()
+
+    def release_write(self):
+        self.write_lock.release()
 
 def generateId():
     while True:
@@ -111,10 +134,10 @@ def spawn_new_server(server_name):
     start_new_server(new_server)
 
 #gets the server for client using hash 
-def get_avail_serv(cli_id, max_attempts = 10):
+def get_avail_serv(cli_id, hash_obj, max_attempts = 10):
     attempts = 0
     while attempts < max_attempts:
-        get_ser_name = hash.reqhash(int(cli_id))
+        get_ser_name = hash_obj.reqhash(int(cli_id))
         if get_ser_name is not None:
             if checkHeartbeat(get_ser_name) == 200: #used to see the server is alive or not and returns if avaliable
                 return get_ser_name
@@ -132,12 +155,63 @@ def add_servers(servers):
         print('Error while adding servers: ',e,flush=True)
         return jsonify({'message': f'Error: {str(e)}'}), 500
 
+def read_to_shard(shard_id, server_name, low, high, read_queue):
+
+    shard_lock = shard_locks[shard_id]
+    shard_lock.acquire_read()
+
+    info = {
+        "shard" : shard_id,
+        "Stud_id":{'low' : low, 'high' : high}
+    }
+    try:
+        response = requests.post(f"http://{server_name}:5000/read?id={server_name}",json=info)
+        data = json.loads(response.text)
+        print('Inside',data,flush=True)
+        read_queue.put(data)
+    except Exception as e:
+        print('Error while reading from shards in read_to_shard func: ',e,flush=True)
+        return jsonify({'message': f'Error: {str(e)}'}), 500
+    finally:
+        shard_lock.release_read()
+
+
+def write_to_shard(shard_id, entries):
+
+    shard_lock = shard_locks[shard_id]
+    shard_lock.acquire_write()
+    
+    try:
+        get_servers = db_helper.get_shard_servers(shard_id)
+        get_idx = db_helper.get_shard_idx(shard_id)
+        info = {
+            'shard': shard_id,
+            'curr_idx': get_idx,
+            'data': entries
+        }
+        print(info,flush=True)
+        for ser in get_servers:
+            response = requests.post(f"http://{ser}:5000/write?id={ser}",json=info)
+            data = json.loads(response.text)
+            print('write..........',data,flush=True)
+            new_idx = data['message']['current_idx']
+            update_response = db_helper.update_shard_idx(new_idx, shard_id)
+            print('successfully updated idx in shard_T schema ')
+            if response.status_code == 200:
+                print("Request to", ser, "was successful")
+            else:
+                print("Request to", ser, "failed with status code:", response.status_code)
+    except Exception as e:
+        print('Error while writing to shards in write_to_shard func: ',e,flush=True)
+        return jsonify({'message': f'Error: {str(e)}'}), 500
+    finally:
+        shard_lock.release_write()
 
 @app.route('/<path>',methods=["GET"])
 def path_redirect(path):    
     if path == 'home' or path == 'heartbeat':
         cli_id = request.args.get('id')
-        server_name = get_avail_serv(cli_id)
+        server_name = get_avail_serv(cli_id, hash)
         response = requests.get(f"http://{server_name}:5000/{path}?id={server_name}")
         return jsonify(response.json())
     elif path == 'rep':
@@ -202,7 +276,6 @@ def init():
                 
                 response = requests.post(f"http://{random_ser}:5000/config?id={random_ser}",json=server_info)
 
-        global shard_hash
         for ser, shard_list in data['servers'].items():
             for x in shard_list:
                 if len(shard_hash) == 0 or x not in shard_hash:
@@ -212,6 +285,9 @@ def init():
                     shard_ser[x] = []
                 shard_ser[x].append(ser)
 
+        shard_ids = [shard_info["Shard_id"] for shard_info in data['shards']]
+        for sid in shard_ids:
+            shard_locks[sid] = ShardReadWriteLock()
 
         print("init",shard_hash, shard_ser,flush=True)
 
@@ -273,6 +349,10 @@ def add():
                     if len(shard_ser) == 0 or x not in shard_ser:
                         shard_ser[x] = []
                     shard_ser[x].append(ser)
+
+            shard_ids = [shard_info["Shard_id"] for shard_info in new_shards]
+            for sid in shard_ids:
+                shard_locks[sid] = ShardReadWriteLock()
 
             return jsonify({
                 'N' : len(All_servers),
@@ -348,11 +428,76 @@ def read():
         data = request.json
         low = data['Stud_id']['low']
         high = data['Stud_id']['high']
-        print(low,high,flush=True)
+        read_queue = Queue()
         shards_req = db_helper.shards_required(low,high)
-        print(shards_req,flush=True)
-        return ' ',200
+        threads = {}
+        print('inside read',shard_locks,flush=True)
+        cli_id = request.args.get('id')
+        for shard_id in shards_req:
+            # print('before',shard_hash,shard_id,flush=True)
+            server_name = get_avail_serv(cli_id, shard_hash[shard_id])
+            read_to_shard (shard_id, server_name, low, high, read_queue)
+        #     print('after',shard_hash,shard_id,server_name,flush=True)
+        #     threads[shard_id] = Thread(target=read_to_shard, args=(shard_id, server_name, low, high, read_queue))
+        #     threads[shard_id].start()
+    
+        # for thread in threads.values():
+        #     thread.join()
+        
+        data_list = []
+        while not read_queue.empty():
+            result = read_queue.get()
+            data_list.append(result)
+        all_rows = []
+
+        for item in data_list:
+            if 'message' in item and 'data' in item['message']:
+                all_rows.extend(item['message']['data'])
+
+        response ={
+            "shards_queried":shards_req,
+            "data" : all_rows,
+            "status" : "success"
+        }
+        print(all_rows,flush=True)
+        
+        return jsonify(response),200
     except Exception as e:
+        return jsonify({'message':f'Error :{str(e)}'}),500
+
+@app.route('/write',methods = ['POST'])
+def write():
+    try:
+        data = request.json
+        write_shard = {}
+        all_rows = data.get('data')
+        n = len(all_rows)
+        for entry in all_rows:
+            print(entry,entry['Stud_id'],flush=True)
+            res = db_helper.studid_to_shard(entry['Stud_id'])
+            print('from db : ',res, type(res),flush=True)
+            if len(write_shard) == 0 or res not in write_shard:
+                write_shard[res]=[]
+            write_shard[res].append(entry)
+        print(write_shard,flush =True)
+        threads = {}
+        print('inside write',shard_locks,flush=True)
+        for shard_id, entries in write_shard.items():
+            write_to_shard(shard_id,entries)
+        #     threads[shard_id] = Thread(target=write_to_shard, args=(shard_id, entries))
+        #     threads[shard_id].start()
+    
+        # for thread in threads.values():
+        #     thread.join() 
+
+        print(db_helper.get_all(),flush=True)   
+        response = {
+            "message" : f"{n} Data entries added",
+            "status" : "success"
+        }      
+        return jsonify(response),200  
+    except Exception as e:
+        print(e)
         return jsonify({'message':f'Error :{str(e)}'}),500
 
 if __name__ == '__main__':

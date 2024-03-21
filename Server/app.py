@@ -46,7 +46,6 @@ def config():
 @app.route('/write', methods=['POST'])
 def write():
     # data = request.json 
-    print("write server",flush=True)
     db_helper.connect()
     try:
         request_payload = request.json
