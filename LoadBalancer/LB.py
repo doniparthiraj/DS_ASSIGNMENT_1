@@ -167,6 +167,44 @@ def add_servers(servers):
         print('Error while adding servers: ',e,flush=True)
         return jsonify({'message': f'Error: {str(e)}'}), 500
 
+def add_oldshards(newshard_ids, new_servers):
+    for new_ser, shards in new_servers.items():
+        for sid in shards:
+            if sid not in newshard_ids:
+                ser = db_helper.get_shard_servers(sid)
+                print('1',ser,flush=True)
+                server_name = ser[0]
+                print('2',server_name,flush=True)
+                try:
+                    info = {'shards':[sid]}
+                    print('3',info,flush=True)
+                    response = requests.get(f"http://{server_name}:5000/copy?id={server_name}",json=info)
+                    data = json.loads(response.text)
+                    print('4',data,flush=True)
+                    entries = data.get(sid)
+                    print('5',entries,flush=True)
+                    get_idx = db_helper.get_lowid(sid)
+                    print('6',get_idx,flush=True)
+                    info = {
+                        'shard': sid,
+                        'curr_idx': get_idx,
+                        'data': entries
+                    }
+
+                    response = requests.post(f"http://{new_ser}:5000/write?id={new_ser}",json=info)
+                    data = json.loads(response.text)
+                    print('write..........',data,flush=True)
+                    # new_idx = data['message']['current_idx']
+                    # update_response = db_helper.update_shard_idx(new_idx, shard_id)
+                    # print('successfully updated idx in shard_T schema ')
+                    if response.status_code == 200:
+                        print("Request to", new_ser, "was successful")
+                    else:
+                        print("Request to", new_ser, "failed with status code:", response.status_code)
+                except Exception as e:
+                    print('Error while adding old shards',e,flush=True)
+                    return jsonify({'message': f'Error: {str(e)}'}), 500 
+
 def read_to_shard(shard_id, server_name, low, high, read_queue):
 
         shard_locks[shard_id].acquire_read()
@@ -344,7 +382,7 @@ def add():
                 }
                 
                 print(ser,info,flush = True)
-                time.sleep(10)
+                time.sleep(9)
                 response = requests.post(f"http://{ser}:5000/config?id={ser}",json=info)
                 if response.status_code == 200:
                     print("Request to", ser, "was successful")
@@ -361,10 +399,12 @@ def add():
                         shard_ser[x] = []
                     shard_ser[x].append(ser)
 
-            shard_ids = [shard_info["Shard_id"] for shard_info in new_shards]
-            for sid in shard_ids:
+            newshard_ids = [shard_info["Shard_id"] for shard_info in new_shards]
+            for sid in newshard_ids:
                 shard_locks[sid] = ReadWriteLock()
 
+            add_oldshards(newshard_ids, new_servers)
+            
             return jsonify({
                 'N' : len(All_servers),
                 'message': message,
@@ -377,7 +417,7 @@ def add():
         
 
     except Exception as e:
-        print('add error: ',e,fluah=True)
+        print('add error: ',e,flush=True)
         return jsonify({'message': f'Error: {str(e)}'}), 500
 
 

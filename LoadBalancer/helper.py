@@ -231,3 +231,14 @@ class SQLHandler:
             return response
         except Exception as e:
             return {"error": f"An error occurred: {str(e)}"},500
+
+    def get_lowid(self, sid):
+        try:
+            self.connect()
+            query = '''select Stud_id_low from ShardT_Schema where Shard_id = %s '''
+            response = self.update_query(query, (sid,))
+            print(response,flush=True)
+            return response[0][0]
+        except Exception as e:
+            return {"error": f"An error occurred: {str(e)}"},500
+            

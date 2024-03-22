@@ -115,7 +115,7 @@ def read():
     except Exception as e:
         return jsonify({"error": f"An error occurred: {str(e)}"}), 500
 
-@app.route('/copy', methods=['POST'])
+@app.route('/copy', methods=['GET'])
 def copy():
     # data = request.json 
     print("copy server",flush=True)
