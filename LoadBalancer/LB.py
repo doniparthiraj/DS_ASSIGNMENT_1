@@ -39,38 +39,38 @@ DOCKER_API_VERSION = "3.9"
 
 class ReadWriteLock:
     def __init__(self):
-        self._read_ready = threading.Condition(threading.Lock(  ))
+        self._read_ready = threading.Condition(threading.Lock())
         self._readers = 0
 
     def acquire_read(self):
         """ Acquire a read lock. Blocks only if a thread has
         acquired the write lock. """
-        self._read_ready.acquire(  )
+        self._read_ready.acquire()
         try:
             self._readers += 1
         finally:
-            self._read_ready.release(  )
+            self._read_ready.release()
 
     def release_read(self):
         """ Release a read lock. """
-        self._read_ready.acquire(  )
+        self._read_ready.acquire()
         try:
             self._readers -= 1
             if not self._readers:
-                self._read_ready.notifyAll(  )
+                self._read_ready.notifyAll()
         finally:
-            self._read_ready.release(  )
+            self._read_ready.release()
 
     def acquire_write(self):
         """ Acquire a write lock. Blocks until there are no
         acquired read or write locks. """
-        self._read_ready.acquire(  )
+        self._read_ready.acquire()
         while self._readers > 0:
-            self._read_ready.wait(  )
+            self._read_ready.wait()
 
     def release_write(self):
         """ Release a write lock. """
-        self._read_ready.release(  )
+        self._read_ready.release()
 
 
 def generateId():
@@ -167,9 +167,8 @@ def add_servers(servers):
         print('Error while adding servers: ',e,flush=True)
         return jsonify({'message': f'Error: {str(e)}'}), 500
 
-def read_to_shard(shard_id, server_name, low, high):
+def read_to_shard(shard_id, server_name, low, high, read_queue):
 
-    
         shard_locks[shard_id].acquire_read()
         info = {
             "shard" : shard_id,
@@ -450,7 +449,7 @@ def read():
             print('before',shard_hash,shard_id,flush=True)
             server_name = get_avail_serv(cli_id, shard_hash[shard_id])
             print('after',shard_hash,shard_id,server_name,flush=True)
-            threads[shard_id] = threading.Thread(target=read_to_shard, args=(shard_id, server_name, low, high))
+            threads[shard_id] = threading.Thread(target=read_to_shard, args=(shard_id, server_name, low, high,read_queue))
             threads[shard_id].start()
     
         for thread in threads.values():
@@ -509,58 +508,62 @@ def write():
         }      
         return jsonify(response),200  
     except Exception as e:
-        print(e)
+        print('error in write end point ',e)
         return jsonify({'message':f'Error :{str(e)}'}),500
 
-    @app.route('/update',methods = ['POST'])
-    def update():
-        try:
-            data = response.json
-            St_id = data.get('Stud_id')
-            row = data.get('data')
-            shard_id = db_helper.studid_to_shard(St_id)
-            info = {
-                "shard" : shard_id,
-                "Stud_id" : St_id,
-                "data" : row
-            }
-            servers = db_helper.get_shard_servers(shard_id)
-            for ser in servers:
-                response = requests.post(f"http://{ser}:5000/update?id={ser}",json=info)
-                x = json.loads(response.text)
-                print(x,flush=True)
-            response = {
-                "message" : f"Data entry for Stud_id: {St_id} updated",
-                "status" : "success"
-            } 
-            return jsonify(response),200
-        except Exception as e:
-            print(e,flush=True)
-            return jsonify({'message':f'Error :{str(e)}'}),500
+@app.route('/update',methods = ['PUT'])
+def update():
+    try:
+        data = request.json
+        St_id = data.get('Stud_id')
+        row = data.get('data')
+        shard_id = db_helper.studid_to_shard(St_id)
+        print(shard_id,St_id,row,flush=True)
+        info = {
+            "shard" : shard_id,
+            "Stud_id" : St_id,
+            "data" : row
+        }
+        servers = db_helper.get_shard_servers(shard_id)
+        print(servers,flush=True)
+        for ser in servers:
+            response = requests.put(f"http://{ser}:5000/update?id={ser}",json=info)
+            x = json.loads(response.text)
+            print(x,flush=True)
+        response = {
+            "message" : f"Data entry for Stud_id: {St_id} updated",
+            "status" : "success"
+        } 
+        return jsonify(response),200
+    except Exception as e:
+        print('error while updating ',e,flush=True)
+        return jsonify({'message':f'Error :{str(e)}'}),500
 
-    @app.route('/delete',methods = ['POST'])
-    def delete():
-        try:
-            data = response.json
-            St_id = data.get('Stud_id')
-            shard_id = db_helper.studid_to_shard(St_id)
-            info = {
-                "shard" : shard_id,
-                "Stud_id" : St_id
-            }
-            servers = db_helper.get_shard_servers(shard_id)
-            for ser in servers:
-                response = requests.post(f"http://{ser}:5000/delete?id={ser}",json=info)
-                x = json.loads(response.text)
-                print(x,flush=True)
-            response = {
-                "message" : f"Data entry with Stud_id: {St_id} removed",
-                "status" : "success"
-            } 
-            return jsonify(response),200
-        except Exception as e:
-            print(e,flush=True)
-            return jsonify({'message':f'Error :{str(e)}'}),500
+@app.route('/delete',methods = ['DELETE'])
+def delete():
+    try:
+        data = request.json
+        St_id = data.get('Stud_id')
+        shard_id = db_helper.studid_to_shard(St_id)
+        info = {
+            "shard" : shard_id,
+            "Stud_id" : St_id
+        }
+        print(shard_id,St_id,flush=True)
+        servers = db_helper.get_shard_servers(shard_id)
+        print(servers,flush=True)
+        for ser in servers:
+            response = requests.delete(f"http://{ser}:5000/delete?id={ser}",json=info)
+            x = json.loads(response.text)
+            print(x,flush=True)
+        response = {
+            "message" : f"Data entry with Stud_id: {St_id} removed",
+            "status" : "success"
+        } 
+        return jsonify(response),200
+    except Exception as e:
+        print('error while deleting: ',e,flush=True)
+        return jsonify({'message':f'Error :{str(e)}'}),500
 
 if __name__ == '__main__':
     app.run(debug = True,host = '0.0.0.0',port = 5000)
