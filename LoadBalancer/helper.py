@@ -205,8 +205,12 @@ class SQLHandler:
         try:
             self.connect()
             query = '''select Server_id from MapT_Schema where Shard_id = %s'''
-            response = self.update_query(query, (sid,))
-            return response[0]
+            q_res = self.update_query(query, (sid,))
+            response = []
+            for x in q_res:
+                response.append(x[0])
+
+            return response
         except Exception as e:
             return {"error": f"An error occurred: {str(e)}"},500
 
