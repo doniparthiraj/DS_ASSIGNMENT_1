@@ -218,11 +218,8 @@ class SQLHandler:
                 print(copy_from_table_query,flush=True)
 
             return jsonify({
-                'message': {
-                    "data": details,
+                    **details,
                     "status" : "success"
-                    },
-                    "status": "successful"
                 }), 200
     
         except Exception as e:
