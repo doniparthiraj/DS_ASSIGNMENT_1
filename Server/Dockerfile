@@ -1,16 +1,10 @@
-FROM mysql:8.0-debian
+FROM baseimg
 
 COPY deploy.sh /always-initdb.d/
 COPY . /ser
 WORKDIR /ser
 
-RUN apt-get update
-RUN apt-get install -y \
-    python3-full \
-    python3-pip
-RUN pip install --break-system-packages --upgrade pip
 
-RUN pip install --break-system-packages -r requirements.txt
 RUN chmod +x /ser/custom-entry.sh
 
 ENV USER=theuser

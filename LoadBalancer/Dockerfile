@@ -1,26 +1,11 @@
-FROM mysql:8.0-debian
+FROM baseimg
 
 COPY deploy.sh /always-initdb.d/
+
 COPY . /lb
 WORKDIR /lb
 
-RUN apt-get update
-RUN apt-get install -y \
-    python3-full \
-    python3-pip
-RUN pip install --break-system-packages --upgrade pip
-
-RUN pip install --break-system-packages -r requirements.txt
 RUN chmod +x /lb/custom-entry.sh
-
-RUN apt-get update
-RUN apt-get -y install sudo
-
-RUN apt-get -y install apt-transport-https ca-certificates curl gnupg2 software-properties-common
-RUN curl -fsSL https://download.docker.com/linux/debian/gpg | apt-key add -
-RUN add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/debian $(lsb_release -cs) stable"
-RUN apt-get update
-RUN apt-get -y install docker-ce-cli
 
 ENV USER=theuser
 RUN adduser --home /home/$USER --disabled-password --gecos GECOS $USER \
