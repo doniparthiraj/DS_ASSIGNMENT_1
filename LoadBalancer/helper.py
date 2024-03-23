@@ -180,10 +180,17 @@ class SQLHandler:
         try:
             self.connect()
             print(low,type(low),flush=True)
+            
             range_query ='''Select Shard_id from ShardT_Schema 
-                            where ( %s BETWEEN Stud_id_low AND Stud_id_low+Shard_size ) 
-                                OR( %s BETWEEN Stud_id_low AND Stud_id_low+Shard_size )'''
-            db_response = self.update_query(range_query,(low,high))
+                            where (Stud_id_low BETWEEN %s AND %s)
+                            OR
+                            (Stud_id_low+Shard_size BETWEEN %s AND %s)
+                            OR
+                            (%s BETWEEN Stud_id_low AND Stud_id_low+Shard_size)
+                            OR
+                            (%s BETWEEN Stud_id_low AND Stud_id_low+Shard_size) '''
+            db_response = self.update_query(range_query,(low,high,low,high,low,high))
+            
             response = []
             for x in db_response:
                 response.append(x[0])
@@ -242,3 +249,31 @@ class SQLHandler:
         except Exception as e:
             return {"error": f"An error occurred: {str(e)}"},500
             
+    def all_shard_servers(self):
+        try:
+            self.connect()
+            query = '''select Shard_id,Server_id from MapT_Schema'''
+            response = self.query(query)
+            result = {}
+            for shard, server in response:
+                if shard in result:
+                    result[shard].append(server)
+                else:
+                    result[shard] = [server]
+            print(result,flush=True)
+            return result
+        except Exception as e:
+            return {"error": f"An error occurred: {str(e)}"},500
+
+    def get_shards_server(self,server_name):
+        try:
+            self.connect()
+            query = '''select Shard_id from MapT_Schema where Server_id = %s'''
+            response = self.update_query(query, (server_name,))
+            result = []
+            for shard in response:
+                result.append(shard[0])
+            print(result,flush=True)
+            return result
+        except Exception as e:
+            return {"error": f"An error occurred: {str(e)}"},500
