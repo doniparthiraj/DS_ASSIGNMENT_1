@@ -44,9 +44,10 @@ class SQLHandler:
             self.query(f"DROP DATABASE {dbname}")
 
     def initialize_shard_tables(self, payload, server_name):
-        self.connect()
+        
         try:        
             # Extract schema and shards from the payload
+            self.connect()
             schema = payload.get('schema', {})
             columns = schema.get('columns', [])
             dtypes = schema.get('dtypes', [])
@@ -71,8 +72,9 @@ class SQLHandler:
             return {"error": f"An error occurred: {str(e)}"},500
         
     def write_to_database(self, payload):
-        self.connect()
+        
         try:
+            self.connect()
             shard = payload.get('shard', "\0")
             curr_idx = payload.get('curr_idx', 0)
             data = payload.get('data', [])
@@ -101,8 +103,9 @@ class SQLHandler:
             return {"error": f"An error occurred: {str(e)}"},500
 
     def update_to_database(self, payload):
-        self.connect()
+        
         try:
+            self.connect()
             shard = payload.get('shard', "\0")
             original_Stud_id = payload.get('Stud_id', 0)
             data = payload.get('data', {})
@@ -130,8 +133,9 @@ class SQLHandler:
             return {"error": f"An error occurred: {str(e)}"},500
         
     def delete_to_database(self, payload):
-        self.connect()
+        
         try:
+            self.connect()
             shard = payload.get('shard', "\0")
             Stud_id = payload.get('Stud_id', 0)
             table_name = f'StudT_{shard}'
@@ -154,8 +158,9 @@ class SQLHandler:
             return {"error": f"An error occurred: {str(e)}"},500
         
     def read_from_database(self, payload):
-        self.connect()
+        
         try:
+            self.connect()
             shard = payload.get('shard', "\0")
             Stud_id = payload.get('Stud_id', 0)
             stud_id_low = Stud_id.get('low', 0)
@@ -187,8 +192,9 @@ class SQLHandler:
             return {"error": f"An error occurred: {str(e)}"},500
         
     def copy_from_database(self, payload):
-        self.connect()
+        
         try:
+            self.connect()
             details = {}
             shards = payload.get('shards', [])
             for shard in shards:

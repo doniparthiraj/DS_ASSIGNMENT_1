@@ -17,6 +17,7 @@ shard_locks = {}
 server_locks = {}
 
 db_mutex = threading.Lock()
+
 hash = CH()
 All_servers = {}
 DOCKER_IMAGE_NAME = "flaskserver"
@@ -252,7 +253,7 @@ def read_to_shard(shard_id, server_name, low, high, read_queue):
         try:
             response = requests.post(f"http://{server_name}:5000/read?id={server_name}",json=info)
             data = json.loads(response.text)
-            print('Inside',data,flush=True)
+            #print('Inside',data,flush=True)
             read_queue.put(data)
         except Exception as e:
             print('Error while reading from shards in read_to_shard func: ',e,flush=True)
@@ -527,7 +528,11 @@ def read():
         low = data['Stud_id']['low']
         high = data['Stud_id']['high']
         read_queue = Queue()
-        shards_req = db_helper.shards_required(low,high)
+        db_mutex.acquire()
+        try:
+            shards_req = db_helper.shards_required(low,high)
+        finally:
+            db_mutex.release()
         threads = {}
         print('inside read',shard_locks,flush=True)
         cli_id = request.args.get('id')
@@ -556,7 +561,7 @@ def read():
             "data" : all_rows,
             "status" : "success"
         }
-        print(all_rows,flush=True)
+        #print(all_rows,flush=True)
         
         return jsonify(response),200
     except Exception as e:
