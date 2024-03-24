@@ -278,21 +278,21 @@ def write_to_shard(shard_id, entries):
             'curr_idx': get_idx,
             'data': entries
         }
-        print(info,flush=True)
-        print(shard_id,get_servers,flush=True)
+        # print(info,flush=True)
+        # print(shard_id,get_servers,flush=True)
         for ser in get_servers:
             server_locks[ser].acquire_write()
             try:
                 response = requests.post(f"http://{ser}:5000/write?id={ser}",json=info)
                 data = json.loads(response.text)
-                print('write..........',data,flush=True)
+                # print('write..........',data,flush=True)
                 new_idx = data['message']['current_idx']
                 db_mutex.acquire()
                 try:
                     update_response = db_helper.update_shard_idx(new_idx, shard_id)
                 finally:
                     db_mutex.release()
-                print('successfully updated idx in shard_T schema ')
+                # print('successfully updated idx in shard_T schema ')
                 if response.status_code == 200:
                     print("Request to", ser, "was successful")
                 else:
@@ -528,18 +528,18 @@ def read():
         low = data['Stud_id']['low']
         high = data['Stud_id']['high']
         read_queue = Queue()
-        db_mutex.acquire()
-        try:
-            shards_req = db_helper.shards_required(low,high)
-        finally:
-            db_mutex.release()
+        # db_mutex.acquire()
+        # try:
+        shards_req = db_helper.shards_required(low,high)
+        # finally:
+        #     db_mutex.release()
         threads = {}
-        print('inside read',shard_locks,flush=True)
+        # print('inside read',shard_locks,flush=True)
         cli_id = request.args.get('id')
         for shard_id in shards_req:
-            print('before',shard_hash,shard_id,flush=True)
+            # print('before',shard_hash,shard_id,flush=True)
             server_name = get_avail_serv(cli_id, shard_hash[shard_id])
-            print('after',shard_hash,shard_id,server_name,flush=True)
+            # print('after',shard_hash,shard_id,server_name,flush=True)
             threads[shard_id] = threading.Thread(target=read_to_shard, args=(shard_id, server_name, low, high,read_queue))
             threads[shard_id].start()
     
@@ -582,13 +582,13 @@ def write():
                 res = db_helper.studid_to_shard(entry['Stud_id'])
             finally:
                 db_mutex.release()
-            print('from db : ',res, type(res),flush=True)
+            # print('from db : ',res, type(res),flush=True)
             if len(write_shard) == 0 or res not in write_shard:
                 write_shard[res]=[]
             write_shard[res].append(entry)
-        print(write_shard,flush =True)
+        # print(write_shard,flush =True)
         threads = {}
-        print('inside write',shard_locks,flush=True)
+        # print('inside write',shard_locks,flush=True)
         for shard_id, entries in write_shard.items():
             threads[shard_id] = threading.Thread(target=write_to_shard, args=(shard_id, entries))
             threads[shard_id].start()

@@ -17,18 +17,18 @@ async def client_request(session, url, payload=None):
  
 async def main():
     write_link = 'http://127.0.0.1:5000/write'
-    num_write_req = 10000
+    num_write_req = 1000
     server_ids = []
     used_ids = set()
     start_time = time.time()
-    timeout = aiohttp.ClientTimeout(total=700)
+    timeout = aiohttp.ClientTimeout(total=10000)
     async with aiohttp.ClientSession(timeout=timeout) as session:
         tasks = []
  
         for i in range(num_write_req):
-            stud_id = random.randint(0,16000)
+            stud_id = random.randint(0,12000)
             while stud_id in used_ids:
-                stud_id = random.randint(0,16000)
+                stud_id = random.randint(0,12000)
             used_ids.add(stud_id)
  
         used_ids = list(used_ids)
