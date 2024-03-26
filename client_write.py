@@ -50,10 +50,10 @@ async def main():
     end_time = time.time()
     total_time = (end_time - start_time)
     speed = num_write_req/total_time
-    server_id_count = {server_id: server_ids.count(server_id) for server_id in set(server_ids)}
+    # server_id_count = {server_id: server_ids.count(server_id) for server_id in set(server_ids)}
     print(f"Total time taken is {total_time} seconds.")
     print(f"Speed is {speed} requests per second.")
-    print(server_id_count)
+    # print(server_id_count)
     
  
 if __name__ == '__main__':

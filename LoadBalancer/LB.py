@@ -528,11 +528,11 @@ def read():
         low = data['Stud_id']['low']
         high = data['Stud_id']['high']
         read_queue = Queue()
-        # db_mutex.acquire()
-        # try:
-        shards_req = db_helper.shards_required(low,high)
-        # finally:
-        #     db_mutex.release()
+        db_mutex.acquire()
+        try:
+            shards_req = db_helper.shards_required(low,high)
+        finally:
+            db_mutex.release()
         threads = {}
         # print('inside read',shard_locks,flush=True)
         cli_id = request.args.get('id')
