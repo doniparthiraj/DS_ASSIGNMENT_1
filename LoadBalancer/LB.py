@@ -9,7 +9,6 @@ import json
 from helper import SQLHandler
 from queue import Queue
 
-
 app = Flask(__name__)
 
 db_helper = SQLHandler()
@@ -18,6 +17,7 @@ shard_locks = {}
 server_locks = {}
 
 db_mutex = threading.Lock()
+
 hash = CH()
 All_servers = {}
 DOCKER_IMAGE_NAME = "flaskserver"
@@ -74,7 +74,6 @@ class ReadWriteLock:
     def release_write(self):
         """ Release a write lock. """
         self._read_ready.release()
-
 
 def generateId():
     while True:
@@ -254,7 +253,7 @@ def read_to_shard(shard_id, server_name, low, high, read_queue):
         try:
             response = requests.post(f"http://{server_name}:5000/read?id={server_name}",json=info)
             data = json.loads(response.text)
-            print('Inside',data,flush=True)
+            #print('Inside',data,flush=True)
             read_queue.put(data)
         except Exception as e:
             print('Error while reading from shards in read_to_shard func: ',e,flush=True)
@@ -279,21 +278,21 @@ def write_to_shard(shard_id, entries):
             'curr_idx': get_idx,
             'data': entries
         }
-        print(info,flush=True)
-        print(shard_id,get_servers,flush=True)
+        # print(info,flush=True)
+        # print(shard_id,get_servers,flush=True)
         for ser in get_servers:
             server_locks[ser].acquire_write()
             try:
                 response = requests.post(f"http://{ser}:5000/write?id={ser}",json=info)
                 data = json.loads(response.text)
-                print('write..........',data,flush=True)
+                # print('write..........',data,flush=True)
                 new_idx = data['message']['current_idx']
                 db_mutex.acquire()
                 try:
                     update_response = db_helper.update_shard_idx(new_idx, shard_id)
                 finally:
                     db_mutex.release()
-                print('successfully updated idx in shard_T schema ')
+                # print('successfully updated idx in shard_T schema ')
                 if response.status_code == 200:
                     print("Request to", ser, "was successful")
                 else:
@@ -522,7 +521,6 @@ def status():
     except Exception as e:
         return jsonify({'message':f'Error :{str(e)}'}),500
 
-
 @app.route('/read',methods = ['POST'])
 def read():
     try:
@@ -530,14 +528,18 @@ def read():
         low = data['Stud_id']['low']
         high = data['Stud_id']['high']
         read_queue = Queue()
-        shards_req = db_helper.shards_required(low,high)
+        db_mutex.acquire()
+        try:
+            shards_req = db_helper.shards_required(low,high)
+        finally:
+            db_mutex.release()
         threads = {}
-        print('inside read',shard_locks,flush=True)
+        # print('inside read',shard_locks,flush=True)
         cli_id = request.args.get('id')
         for shard_id in shards_req:
-            print('before',shard_hash,shard_id,flush=True)
+            # print('before',shard_hash,shard_id,flush=True)
             server_name = get_avail_serv(cli_id, shard_hash[shard_id])
-            print('after',shard_hash,shard_id,server_name,flush=True)
+            # print('after',shard_hash,shard_id,server_name,flush=True)
             threads[shard_id] = threading.Thread(target=read_to_shard, args=(shard_id, server_name, low, high,read_queue))
             threads[shard_id].start()
     
@@ -559,7 +561,7 @@ def read():
             "data" : all_rows,
             "status" : "success"
         }
-        print(all_rows,flush=True)
+        #print(all_rows,flush=True)
         
         return jsonify(response),200
     except Exception as e:
@@ -580,13 +582,13 @@ def write():
                 res = db_helper.studid_to_shard(entry['Stud_id'])
             finally:
                 db_mutex.release()
-            print('from db : ',res, type(res),flush=True)
+            # print('from db : ',res, type(res),flush=True)
             if len(write_shard) == 0 or res not in write_shard:
                 write_shard[res]=[]
             write_shard[res].append(entry)
-        print(write_shard,flush =True)
+        # print(write_shard,flush =True)
         threads = {}
-        print('inside write',shard_locks,flush=True)
+        # print('inside write',shard_locks,flush=True)
         for shard_id, entries in write_shard.items():
             threads[shard_id] = threading.Thread(target=write_to_shard, args=(shard_id, entries))
             threads[shard_id].start()
