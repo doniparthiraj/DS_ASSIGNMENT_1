@@ -10,4 +10,5 @@ FOr Code Optimisations:
 -> for read:
   FOr each shard , a thread is created and accordingly data is updated(runs parallely)
 
-  
+->check readme.pdf for assignment 1 analysis
+->check report_ds.pdf for assignment 2 analysis.
