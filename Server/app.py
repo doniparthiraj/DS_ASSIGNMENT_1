@@ -46,7 +46,6 @@ def config():
 @app.route('/write', methods=['POST'])
 def write():
     # data = request.json 
-    print("write server",flush=True)
     db_helper.connect()
     try:
         request_payload = request.json
@@ -61,7 +60,7 @@ def write():
     except Exception as e:
         return jsonify({"error": f"An error occurred: {str(e)}"}), 500
     
-@app.route('/update', methods=['POST'])
+@app.route('/update', methods=['PUT'])
 def update():
     # data = request.json 
     print("update server",flush=True)
@@ -73,13 +72,13 @@ def update():
         if 'shard' in request_payload and 'Stud_id' in request_payload and 'data' in request_payload:
             response = db_helper.update_to_database(request_payload)
             return response
- 
+
         return jsonify({"error": "Invalid payload structure"}), 400
  
     except Exception as e:
         return jsonify({"error": f"An error occurred: {str(e)}"}), 500
     
-@app.route('/delete', methods=['POST'])
+@app.route('/delete', methods=['DELETE'])
 def delete():
     # data = request.json 
     print("delete server",flush=True)
@@ -116,7 +115,7 @@ def read():
     except Exception as e:
         return jsonify({"error": f"An error occurred: {str(e)}"}), 500
 
-@app.route('/copy', methods=['POST'])
+@app.route('/copy', methods=['GET'])
 def copy():
     # data = request.json 
     print("copy server",flush=True)
