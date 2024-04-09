@@ -562,7 +562,11 @@ def rm():
                 if len(result) > 0: #checking if containers are available or not for removing
                     random_server = result[0]
                     removeServer(random_server)
-                    deleted_servers.append(random_server) 
+                    deleted_servers.append(random_server)
+            info = {
+                'servers':deleted_servers
+            }
+            res = requests.post(f"http://shardmanager:5000/shardrm",json=info)
             print('After removing : ',All_servers,flush=True)
             return jsonify({
                 'message': {
