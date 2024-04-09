@@ -182,35 +182,8 @@ def init():
         print("Inside ShardManager app.py",MapT,flush=True)
         return jsonify("Init Shard Manager Successful"),200
     except Exception as e:
-        print('Shard Manager error in shardinit: ',e,flush=True)
+        print('Shard Manager error : ',e,flush=True)
         return jsonify({'message':f'Error :{str(e)}'}),500
-
-@app.route('/shardrm',methods = ["POST"])
-def shardrm():
-    global All_servers
-    global MapT
-    try:
-        data = request.json
-        servers = data['servers']
-        for ser in servers:
-            All_servers.pop(ser)
-        for ser in servers:
-            primary_shards = [shard_ser[0] for shard_ser in MapT if shard_ser[1] == ser and shard_ser[2] == 1]
-            for shard in primary_shards:
-                new_primary = leader_election(ser,shard)
-                MapT.append([shard,new_primary,1])
-                update_payload = {
-                    'shard':shard,
-                    'server':new_primary
-                }
-                res = requests.post(f"http://lb_server:5000/update_map_table",json = update_payload)
-
-            MapT = [shard_ser for shard_ser in MapT if shard_ser[1] != ser]
-        return jsonify("Shard rm successful"),200
-    except Exception as e:
-        print('Shard Manager error in shardrm : ',e,flush=True)
-        return jsonify({'message':f'Error :{str(e)}'}),500
-
 
 if __name__ == '__main__':
     app.run(debug = True,host = '0.0.0.0',port = 5000)
