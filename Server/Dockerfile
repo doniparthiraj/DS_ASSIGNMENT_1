@@ -13,6 +13,8 @@ RUN adduser --home /home/$USER --disabled-password --gecos GECOS $USER \
 RUN touch /ser/topicLog.db
 RUN chown $USER /ser/topicLog.db
 
+RUN chown -R $USER:$USER /ser
+RUN chmod 755 /ser
 USER $USER
 ENV HOME=/home/$USER
 ENV MYSQL_ROOT_PASSWORD="abc"

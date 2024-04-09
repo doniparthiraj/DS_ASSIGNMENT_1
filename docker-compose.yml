@@ -4,9 +4,10 @@ services:
     build: ./LoadBalancer
     image: lb_image
     container_name: lb_server
+    platform: "linux/x86_64"
     ports:
-      - "5000:5000"
-    privileged: true  
+      - "5001:5000"
+    privileged: true
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
     networks:
@@ -15,6 +16,23 @@ services:
           - lb_server
     environment:
       SERVER_ID: 100
+
+  serviceshardmanager:
+    build: ./ShardManager
+    image: shardmanager_img
+    container_name: shardmanager
+    platform: "linux/x86_64"
+    ports:
+      - "5002:5000"
+    privileged: true
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      net1:
+        aliases:
+          - shardmanager
+    environment:
+      SERVER_ID: 200
 
 networks:
   net1:
