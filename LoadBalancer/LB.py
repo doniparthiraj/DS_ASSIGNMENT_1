@@ -392,7 +392,9 @@ def init():
             }
             shards_present.extend(info['shards']) 
             print(ser,info,flush = True)
+
             time.sleep(80)
+
             response = requests.post(f"http://{ser}:5000/config?id={ser}", json=info)
             if response.status_code == 200:
                 print("Request to", ser, "was successful")
@@ -425,7 +427,9 @@ def init():
         for ser in servers:
             server_locks[ser] = ReadWriteLock()
 
+
         time.sleep(80)
+
         # shard_ser = db_helper.all_shard_servers()
         # print(shard_ser,flush=True)
 
@@ -497,7 +501,9 @@ def add():
                 }
                 
                 print(ser,info,flush = True)
+
                 time.sleep(80)
+
                 response = requests.post(f"http://{ser}:5000/config?id={ser}",json=info)
                 if response.status_code == 200:
                     print("Request to", ser, "was successful")
@@ -686,6 +692,7 @@ def update():
         row = data.get('data')
         shard_id = db_helper.studid_to_shard(St_id)
         print(shard_id,St_id,row,flush=True)
+
         
         servers = db_helper.get_shard_servers(shard_id)
         primary_server = db_helper.get_primary_server(shard_id)
@@ -702,6 +709,7 @@ def update():
         response = requests.put(f"http://{primary_server}:5000/update?id={primary_server}",json=info)
         x = json.loads(response.text)
         print(x,flush=True)
+
         response = {
             "message" : f"Data entry for Stud_id: {St_id} updated",
             "status" : "success"

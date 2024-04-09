@@ -148,7 +148,9 @@ def write():
 def update():
     # data = request.json 
     db_helper = SQLHandler()
+
     server_name = request.args.get('id')
+
     print("update server",flush=True)
     db_helper.connect()
     try:
@@ -211,10 +213,12 @@ def update():
                     file.write(f"{request_payload}$")
                 
         # Validate the payload structure
+
             if 'shard' in request_payload and 'Stud_id' in request_payload and 'data' in request_payload:
                     response = db_helper.update_to_database(request_payload)
                     return response
             return jsonify({"error": "Invalid payload structure"}), 400
+
  
     except Exception as e:
         return jsonify({"error": f"An error occurred: {str(e)}"}), 500
