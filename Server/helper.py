@@ -76,7 +76,6 @@ class SQLHandler:
         try:
             self.connect()
             shard = payload.get('shard', "\0")
-            curr_idx = payload.get('curr_idx', 0)
             data = payload.get('data', [])
             table_name = f'StudT_{shard}'
             
@@ -93,7 +92,6 @@ class SQLHandler:
             return jsonify({
                 'message': {
                     "message": "Data entries added",
-                    "current_idx": curr_idx+len(data),
                     "status" : "success"
                     },
                     "status": "successful"

@@ -8,6 +8,7 @@ import time
 import json
 from helper import SQLHandler
 from queue import Queue
+import numpy as np
 
 app = Flask(__name__)
 
@@ -24,21 +25,21 @@ DOCKER_IMAGE_NAME = "flaskserver"
 DOCKER_API_VERSION = "3.9"
 
 
-def continuous_server_check():
-    while(True):
-        time.sleep(80)
-        if bool(All_servers) == False:
-            time.sleep(50)
-            continue
-        for ser_name in list(All_servers.keys()):
-            if checkHeartbeat(ser_name) != 200:
-                spawn_new_server(ser_name)
-                time.sleep(9)
-        time.sleep(2)
+# def continuous_server_check():
+#     while(True):
+#         time.sleep(80)
+#         if bool(All_servers) == False:
+#             time.sleep(50)
+#             continue
+#         for ser_name in list(All_servers.keys()):
+#             if checkHeartbeat(ser_name) != 200:
+#                 spawn_new_server(ser_name)
+#                 time.sleep(9)
+#         time.sleep(2)
 
-server_check_thread = threading.Thread(target=continuous_server_check)
-server_check_thread.daemon = True  # Daemonize the thread so it will exit when the main thread exits
-server_check_thread.start()
+# server_check_thread = threading.Thread(target=continuous_server_check)
+# server_check_thread.daemon = True  # Daemonize the thread so it will exit when the main thread exits
+# server_check_thread.start()
 
 class ReadWriteLock:
     def __init__(self):
@@ -120,9 +121,9 @@ def removeServer(server_name):
         remove_server_from_shards(server_name)
         res = db_helper.remove_server(server_name)
         All_servers.pop(server_name) #removing from dict
-        res = os.system(f'sudo docker stop {server_name} && sudo docker rm {server_name}')
-        if res > 0:
-            return jsonify({"message" : f"{server_name} not found","status" : "failure"}),400
+        # res = os.system(f'sudo docker stop {server_name} && sudo docker rm {server_name}')
+        # if res > 0:
+        #     return jsonify({"message" : f"{server_name} not found","status" : "failure"}),400
     except Exception as e:
         print('removeServer: Main server remov error: ',e,flush=True)
         return jsonify({'message': f'Error: {str(e)}'}), 500
@@ -178,53 +179,64 @@ def add_servers(servers):
         return jsonify({'message': f'Error: {str(e)}'}), 500
 
 def add_oldshards(newshard_ids, new_servers, spawning = False):
-    if spawning:
-        time.sleep(9)
+    # if spawning:
+    #     time.sleep(9)
         
-        x = list(new_servers.keys())
-        s_name = x[0]
-        for key,val in new_servers.items():
-            for v in val:
-                res = db_helper.add_map_table(v,key)
-        db_schema = {
-            'schema':{
-                "columns":["Stud_id","Stud_name","Stud_marks"],
-                "dtypes":["Number","String","String"]
-                },
-            'shards':new_servers[s_name]
-        }
-        response = requests.post(f"http://{s_name}:5000/config?id={s_name}",json=db_schema)
-        if response.status_code == 200:
-            print("Request to", s_name, "was successful")
-        else:
-            print("Request to", s_name, "failed with status code:", response.status_code)
+    #     x = list(new_servers.keys())
+    #     s_name = x[0]
+    #     for key,val in new_servers.items():
+    #         for v in val:
+    #             res = db_helper.add_map_table(v,key,0)
+    #     db_schema = {
+    #         'schema':{
+    #             "columns":["Stud_id","Stud_name","Stud_marks"],
+    #             "dtypes":["Number","String","String"]
+    #             },
+    #         'shards':new_servers[s_name]
+    #     }
+    #     response = requests.post(f"http://{s_name}:5000/config?id={s_name}",json=db_schema)
+    #     if response.status_code == 200:
+    #         print("Request to", s_name, "was successful")
+    #     else:
+    #         print("Request to", s_name, "failed with status code:", response.status_code)
 
-        for x in new_servers[s_name]:
-            shard_hash[x].add_server_hash(s_name, All_servers[s_name])
+    #     for x in new_servers[s_name]:
+    #         shard_hash[x].add_server_hash(s_name, All_servers[s_name])
 
-        server_locks[s_name] = ReadWriteLock()
+    #     server_locks[s_name] = ReadWriteLock()
 
     for new_ser, shards in new_servers.items():
         for sid in shards:
             if sid not in newshard_ids:
-                ser = db_helper.get_shard_servers(sid)
-                print('1',ser,flush=True)
-                server_name = ser[0]
+                # ser = db_helper.get_shard_servers(sid)
+                #get primary of sid 
+                
+                # print('1',ser,flush=True)
+                server_name = db_helper.get_primary_server(sid)
                 print('2',server_name,flush=True)
                 try:
+                    payload = {'shard':sid,'server':server_name}
+                    res1 = requests.post(f"http://{server_name}:5000/get_log_entries?id={server_name}",json = payload)
+                    data1 = json.loads(res1.text)
+                    print(data1,flush=True)
+                    data1['shard'] = sid
+                    res2 = requests.post(f"http://{new_ser}:5000/write_log_entries?id={new_ser}",json=data1)
                     info = {'shards':[sid]}
                     print('3',info,flush=True)
                     response = requests.get(f"http://{server_name}:5000/copy?id={server_name}",json=info)
                     data = json.loads(response.text)
+                    
                     print('4',data,flush=True)
                     entries = data.get(sid)
                     print('5',entries,flush=True)
-                    get_idx = db_helper.get_lowid(sid)
-                    print('6',get_idx,flush=True)
+                    # print('6',get_idx,flush=True)
                     info = {
-                        'shard': sid,
-                        'curr_idx': get_idx,
-                        'data': entries
+                            'shard': sid,
+                            'data': entries,
+                            'from':"shard_manager",
+                            'servers':[],
+                            'primary': server_name
+
                     }
                     if len(data) == 0:
                         print('No data is present in shard',flush=True)
@@ -264,46 +276,53 @@ def read_to_shard(shard_id, server_name, low, high, read_queue):
 
 def write_to_shard(shard_id, entries):
 
-    shard_locks[shard_id].acquire_write()
+    # shard_locks[shard_id].acquire_write()
     
     try:
         db_mutex.acquire()
         try:
             get_servers = db_helper.get_shard_servers(shard_id)
-            get_idx = db_helper.get_shard_idx(shard_id)
+            get_primary = db_helper.get_primary_server(shard_id)
         finally:
             db_mutex.release()
         info = {
             'shard': shard_id,
-            'curr_idx': get_idx,
-            'data': entries
+            'data': entries,
+            'from':"LB",
+            'servers':get_servers,
+            'primary': get_primary
+
         }
-        # print(info,flush=True)
-        # print(shard_id,get_servers,flush=True)
-        for ser in get_servers:
-            server_locks[ser].acquire_write()
-            try:
-                response = requests.post(f"http://{ser}:5000/write?id={ser}",json=info)
-                data = json.loads(response.text)
-                # print('write..........',data,flush=True)
-                new_idx = data['message']['current_idx']
-                db_mutex.acquire()
-                try:
-                    update_response = db_helper.update_shard_idx(new_idx, shard_id)
-                finally:
-                    db_mutex.release()
-                # print('successfully updated idx in shard_T schema ')
-                if response.status_code == 200:
-                    print("Request to", ser, "was successful")
-                else:
-                    print("Request to", ser, "failed with status code:", response.status_code)
-            finally:
-                server_locks[ser].release_write()
+        print(info,flush=True)
+        print(shard_id,get_servers,flush=True)
+
+        # for ser in get_servers:
+        ser = get_primary
+        # server_locks[ser].acquire_write()
+        try:
+            response = requests.post(f"http://{ser}:5000/write?id={ser}",json=info)
+            data = json.loads(response.text)
+            print('write..........',data,flush=True)
+            # new_idx = data['message']['current_idx']
+            # db_mutex.acquire()
+            # try:
+            #     update_response = db_helper.update_shard_idx(new_idx, shard_id)
+            # finally:
+            #     db_mutex.release()
+            # print('successfully updated idx in shard_T schema ')
+            if response.status_code == 200:
+                print("Request to", ser, "was successful")
+            else:
+                print("Request to", ser, "failed with status code:", response.status_code)
+        finally:
+            # server_locks[ser].release_write()
+            print("shard wtire completed")
     except Exception as e:
         print('Error while writing to shards in write_to_shard func: ',e,flush=True)
         return jsonify({'message': f'Error: {str(e)}'}), 500
     finally:
-        shard_locks[shard_id].release_write()
+        # shard_locks[shard_id].release_write()
+        print("write in lb completed")
 
 @app.route('/<path>',methods=["GET"])
 def path_redirect(path):    
@@ -341,7 +360,27 @@ def init():
 
         servers = data['servers'].keys()
         add_servers(servers)
+        #for shardmanager:
+        shard_manager = dict()
+        for ser,shards in data['servers'].items():
+            for shard in shards:
+                if shard not in shard_manager:
+                    shard_manager[shard] = [ser]
+                else:
+                    shard_manager[shard].append(ser)
         
+        shard_dict = dict()
+        for shard,ser in shard_manager.items():
+            if len(ser) > 1:
+                indx = np.random.randint(0,len(ser) - 1)
+            else:
+                indx = 0
+            shard_dict[shard] = ser[indx]
+        
+        data['primary'] = shard_dict
+        data['All_servers'] = All_servers
+        print("inside LB",data,flush=True)
+        ##
         shard_all = [shard['Shard_id'] for shard in data['shards']]
 
         db_helper.initialize_shard_map_table(data)
@@ -353,7 +392,7 @@ def init():
             }
             shards_present.extend(info['shards']) 
             print(ser,info,flush = True)
-            time.sleep(9)
+            time.sleep(20)
             response = requests.post(f"http://{ser}:5000/config?id={ser}", json=info)
             if response.status_code == 200:
                 print("Request to", ser, "was successful")
@@ -369,7 +408,7 @@ def init():
                 server_info = {}
                 server_info['schema'] = data['schema']
                 server_info['shards'] = [shard]
-                res = db_helper.add_map_table(shard,random_ser)
+                res = db_helper.add_map_table(shard,random_ser,0)
                 print(res,flush = True)
                 
                 response = requests.post(f"http://{random_ser}:5000/config?id={random_ser}",json=server_info)
@@ -386,12 +425,17 @@ def init():
         for ser in servers:
             server_locks[ser] = ReadWriteLock()
 
-        time.sleep(9)
+        time.sleep(20)
         # shard_ser = db_helper.all_shard_servers()
         # print(shard_ser,flush=True)
+
+        response = requests.post(f"http://shardmanager:5000/shardinit",json=data)
+        if response.status_code != 200:
+            print("Request to shardmanager failed",response.status_code)
         return jsonify({
             'message' : "Configured Database"
         }),200
+
     except Exception as e:
         print('init error: ',e,flush=True)
         return jsonify({'message':f'Error :{str(e)}'}),500
@@ -405,6 +449,25 @@ def add():
         new_shards = data.get('new_shards',[])
         servers = data.get('servers',{})
         new_servers = {}
+        shard_manager = {}
+        primary = {}
+        new_shard_ids = [shard["Shard_id"] for shard in new_shards]
+        for key,val in servers.items():
+            for v in val:
+                if v in new_shard_ids:
+                    if v not in shard_manager:
+                        shard_manager[v] = [key]
+                    else:
+                        shard_manager[v].append(key)
+        
+        
+        for key,val in shard_manager.items():
+            if len(val) > 1:
+                indx = np.random.randint(0,len(val) - 1)
+            else:
+                indx = 0
+            primary[key] = val[indx]
+
         name_check = lambda s: all(char.isalnum() or char == '_' for char in s)
         if len(servers) >= n:
             for key,val in servers.items():
@@ -415,11 +478,14 @@ def add():
                 new_servers[ser_name] = val
     
             for shard in new_shards:
-                res = db_helper.add_shard_table(shard['Stud_id_low'],shard['Shard_id'],shard['Shard_size'],shard['Stud_id_low'])
+                res = db_helper.add_shard_table(shard['Stud_id_low'],shard['Shard_id'],shard['Shard_size'])
             
             for key,val in new_servers.items():
                 for v in val:
-                    res = db_helper.add_map_table(v,key)
+                    if v in primary and primary[v] == key:
+                        res = db_helper.add_map_table(v,key,1)
+                    else:
+                        res = db_helper.add_map_table(v,key,0)
             
             for ser in new_servers.keys():
                 info = {
@@ -453,6 +519,12 @@ def add():
 
             add_oldshards(newshard_ids, new_servers)
             
+            data['primary'] = primary
+            data['All_servers'] = All_servers
+            print("Insided Add",data,flush = True)
+            response = requests.post(f"http://shardmanager:5000/shardinit",json=data)
+            if response.status_code != 200:
+                print("Request to shardmanager failed",response.status_code)
             return jsonify({
                 'N' : len(All_servers),
                 'message': message,
@@ -514,7 +586,7 @@ def status():
                 'N':len(All_servers),
                 'schema':schema,
                 'shards':shards,
-                'servers':servers
+                'servers':servers,
 
         }),200
 
@@ -534,12 +606,12 @@ def read():
         finally:
             db_mutex.release()
         threads = {}
-        # print('inside read',shard_locks,flush=True)
+        print('inside read',shard_locks,flush=True)
         cli_id = request.args.get('id')
         for shard_id in shards_req:
-            # print('before',shard_hash,shard_id,flush=True)
+            print('before',shard_hash,shard_id,flush=True)
             server_name = get_avail_serv(cli_id, shard_hash[shard_id])
-            # print('after',shard_hash,shard_id,server_name,flush=True)
+            print('after',shard_hash,shard_id,server_name,flush=True)
             threads[shard_id] = threading.Thread(target=read_to_shard, args=(shard_id, server_name, low, high,read_queue))
             threads[shard_id].start()
     
@@ -582,13 +654,13 @@ def write():
                 res = db_helper.studid_to_shard(entry['Stud_id'])
             finally:
                 db_mutex.release()
-            # print('from db : ',res, type(res),flush=True)
+            print('from db : ',res, type(res),flush=True)
             if len(write_shard) == 0 or res not in write_shard:
                 write_shard[res]=[]
             write_shard[res].append(entry)
-        # print(write_shard,flush =True)
+        print(write_shard,flush =True)
         threads = {}
-        # print('inside write',shard_locks,flush=True)
+        print('inside write',shard_locks,flush=True)
         for shard_id, entries in write_shard.items():
             threads[shard_id] = threading.Thread(target=write_to_shard, args=(shard_id, entries))
             threads[shard_id].start()
@@ -660,6 +732,57 @@ def delete():
         print('error while deleting: ',e,flush=True)
         return jsonify({'message':f'Error :{str(e)}'}),500
 
+@app.route('/remove_server_from_db',methods = ['POST'])
+def remove_server_from_db():
+    try:
+        data = request.json
+        removeServer(data['server'])
+
+        response = {
+            "message" : f"server removed",
+            "status" : "success"
+        } 
+        print(response,flush=True)
+        return jsonify(response),200
+    except Exception as e:
+        print('error while removing server: ',e,flush=True)
+        return jsonify({'message':f'Error :{str(e)}'}),500
+
+@app.route('/spawn_add_map_table',methods = ['POST'])
+def spawn_add_map_table():
+    try:
+        data = request.json
+        shard = data['shard']
+        server = data['server']
+        value = data['value']
+        if server not in All_servers:
+            All_servers[server] = value
+        res = db_helper.add_map_table(shard,server,0)   
+        response = {
+            "message" : f"added data at db in LB",
+            "status" : "success"
+        } 
+        print(response,flush=True)
+        return jsonify(response),200
+    except Exception as e:
+        print("Error in spawn_add_map_table",str(e),flush = True)
+
+@app.route('/update_map_table',methods = ['POST'])
+def update_map_table():
+    try:
+        data = request.json
+        shard = data['shard']
+        server = data['server']
+        res = db_helper.update_map_table(shard,server)
+        response = {
+            "message" : f"updated data in LB's Db.",
+            "status" : "success"
+        } 
+        print(response,flush=True)
+        return jsonify(response),200
+    except Exception as e:
+        print("Error in update_map_table",str(e),flush = True)
+
+
 if __name__ == '__main__':
     app.run(debug = True,host = '0.0.0.0',port = 5000)
-

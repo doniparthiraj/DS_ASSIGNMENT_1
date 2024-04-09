@@ -14,3 +14,4 @@ clean:
 	sudo docker rm  -f $$(sudo docker ps -aq)
 	sudo docker rmi lb_image
 	sudo docker rmi flaskserver
+	sudo docker rmi shardmanager_img
