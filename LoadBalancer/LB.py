@@ -165,7 +165,7 @@ def get_avail_serv(cli_id, hash_obj, max_attempts = 10):
             if checkHeartbeat(get_ser_name) == 200: #used to see the server is alive or not and returns if avaliable
                 return get_ser_name
             else:
-                time.sleep(50)
+                time.sleep(80)
         attempts += 1
 
     raise Exception("No available servers after multiple attempts")
@@ -392,7 +392,7 @@ def init():
             }
             shards_present.extend(info['shards']) 
             print(ser,info,flush = True)
-            time.sleep(50)
+            time.sleep(80)
             response = requests.post(f"http://{ser}:5000/config?id={ser}", json=info)
             if response.status_code == 200:
                 print("Request to", ser, "was successful")
@@ -425,7 +425,7 @@ def init():
         for ser in servers:
             server_locks[ser] = ReadWriteLock()
 
-        time.sleep(50)
+        time.sleep(80)
         # shard_ser = db_helper.all_shard_servers()
         # print(shard_ser,flush=True)
 
@@ -497,7 +497,7 @@ def add():
                 }
                 
                 print(ser,info,flush = True)
-                time.sleep(50)
+                time.sleep(80)
                 response = requests.post(f"http://{ser}:5000/config?id={ser}",json=info)
                 if response.status_code == 200:
                     print("Request to", ser, "was successful")
