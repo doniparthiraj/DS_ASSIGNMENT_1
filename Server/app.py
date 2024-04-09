@@ -148,20 +148,77 @@ def write():
 def update():
     # data = request.json 
     db_helper = SQLHandler()
+    server_name = request.args.get('id')
     print("update server",flush=True)
     db_helper.connect()
     try:
         request_payload = request.json
- 
-        # Validate the payload structure
-        if 'shard' in request_payload and 'Stud_id' in request_payload and 'data' in request_payload:
-            response = db_helper.update_to_database(request_payload)
-            return response
+        shard = request_payload['shard']
+        servers = request_payload['servers']
+        primary_server = request_payload['primary']
+        request_payload['operation'] = 'update'
+        print("request_payload",request_payload,flush=True)
+        if request_payload['from'] == 'LB': #server is primary
+            print("I am primry server",flush=True)
+            shard_locks[shard].acquire_write()
+            try:
+             
+                with open(f"{server_name}_{shard}.txt", "a") as file:
+                    logfile_info[f"{server_name}_{shard}"] = logfile_info[f"{server_name}_{shard}"]+1
+                    file.write(f"{request_payload}$")
+                count = 1
+                majority_count = 1
+                for backup in servers:
+                    if backup != primary_server:
+                        print("I am a backup",flush=True)
+                        try:
+                            response = requests.get(f"http://{backup}:5000/heartbeat?id={backup}")
+                            if response.status_code == 200:
+                                majority_count += 1
+                                request_payload['from'] = primary_server
+                                response = requests.put(f"http://{backup}:5000/update?id={backup}",json=request_payload)
+                                data = json.loads(response.text)
+                                print('update..........',data,flush=True)
+                                # new_idx = data['message']['current_idx']
+                                # db_mutex.acquire()
+                                # try:
+                                # update_response = db_helper.update_shard_idx(new_idx, shard_id)
+                                # finally:
+                                    # db_mutex.release()
+                                # print('successfully updated idx in shard_T schema ')
+                                if response.status_code == 200:
+                                    count = count+1
+                                    print("Request to", backup, "was successful")
+                                else:
+                                    print("Request to", backup, "failed with status code:", response.status_code)
+                        finally:
+                            print("update to backup completed",flush=True)
+            finally:
+                shard_locks[shard].release_write()
+            if count>(majority_count)//2:
+                print("majority replied",flush=True)
+                # Validate the payload structure
+                if 'shard' in request_payload and 'Stud_id' in request_payload and 'data' in request_payload:
+                    response = db_helper.update_to_database(request_payload)
+                    return response
 
-        return jsonify({"error": "Invalid payload structure"}), 400
+            return jsonify({"error": "Majority not reached or invalid payload structure"}), 400
+
+        else:
+            if request_payload['from'] != 'shard_manager':
+                with open(f"{server_name}_{shard}.txt", "a") as file:
+                    logfile_info[f"{server_name}_{shard}"] = logfile_info[f"{server_name}_{shard}"]+1
+                    file.write(f"{request_payload}$")
+                
+        # Validate the payload structure
+            if 'shard' in request_payload and 'Stud_id' in request_payload and 'data' in request_payload:
+                    response = db_helper.update_to_database(request_payload)
+                    return response
+            return jsonify({"error": "Invalid payload structure"}), 400
  
     except Exception as e:
         return jsonify({"error": f"An error occurred: {str(e)}"}), 500
+
     
 @app.route('/delete', methods=['DELETE'])
 def delete():
