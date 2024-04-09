@@ -165,7 +165,7 @@ def get_avail_serv(cli_id, hash_obj, max_attempts = 10):
             if checkHeartbeat(get_ser_name) == 200: #used to see the server is alive or not and returns if avaliable
                 return get_ser_name
             else:
-                time.sleep(2)
+                time.sleep(80)
         attempts += 1
 
     raise Exception("No available servers after multiple attempts")
@@ -392,7 +392,9 @@ def init():
             }
             shards_present.extend(info['shards']) 
             print(ser,info,flush = True)
-            time.sleep(20)
+
+            time.sleep(80)
+
             response = requests.post(f"http://{ser}:5000/config?id={ser}", json=info)
             if response.status_code == 200:
                 print("Request to", ser, "was successful")
@@ -425,7 +427,9 @@ def init():
         for ser in servers:
             server_locks[ser] = ReadWriteLock()
 
-        time.sleep(20)
+
+        time.sleep(80)
+
         # shard_ser = db_helper.all_shard_servers()
         # print(shard_ser,flush=True)
 
@@ -497,7 +501,9 @@ def add():
                 }
                 
                 print(ser,info,flush = True)
-                time.sleep(9)
+
+                time.sleep(80)
+
                 response = requests.post(f"http://{ser}:5000/config?id={ser}",json=info)
                 if response.status_code == 200:
                     print("Request to", ser, "was successful")
@@ -686,17 +692,24 @@ def update():
         row = data.get('data')
         shard_id = db_helper.studid_to_shard(St_id)
         print(shard_id,St_id,row,flush=True)
+
+        
+        servers = db_helper.get_shard_servers(shard_id)
+        primary_server = db_helper.get_primary_server(shard_id)
+        print(servers,primary_server,"from update lb",flush=True)
         info = {
+            "from": "LB",
             "shard" : shard_id,
             "Stud_id" : St_id,
-            "data" : row
+            "data" : row,
+            "servers": servers,
+            "primary": primary_server
         }
-        servers = db_helper.get_shard_servers(shard_id)
-        print(servers,flush=True)
-        for ser in servers:
-            response = requests.put(f"http://{ser}:5000/update?id={ser}",json=info)
-            x = json.loads(response.text)
-            print(x,flush=True)
+        # for ser in servers:
+        response = requests.put(f"http://{primary_server}:5000/update?id={primary_server}",json=info)
+        x = json.loads(response.text)
+        print(x,flush=True)
+
         response = {
             "message" : f"Data entry for Stud_id: {St_id} updated",
             "status" : "success"
