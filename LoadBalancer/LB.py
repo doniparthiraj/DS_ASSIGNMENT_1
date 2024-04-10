@@ -12,7 +12,6 @@ from queue import Queue
 
 app = Flask(__name__)
 
-db_helper = SQLHandler()
 shard_hash = {}
 shard_locks = {}
 server_locks = {}
@@ -119,6 +118,7 @@ def removeServer(server_name):
     try:
         hash.rem_server(All_servers[server_name])
         remove_server_from_shards(server_name)
+        db_helper = SQLHandler()
         res = db_helper.remove_server(server_name)
         All_servers.pop(server_name) #removing from dict
         res = os.system(f'sudo docker stop {server_name} && sudo docker rm {server_name}')
@@ -130,6 +130,7 @@ def removeServer(server_name):
 
 def remove_server_from_shards(server_name):
     try:
+        db_helper = SQLHandler()
         shard_ser = db_helper.all_shard_servers()
         for shard, servers in shard_ser.items():
             if server_name in servers:
@@ -142,6 +143,7 @@ def remove_server_from_shards(server_name):
 
 
 def spawn_new_server(server_name):
+    db_helper = SQLHandler()
     shards = db_helper.get_shards_server(server_name)
     hash.rem_server(All_servers[server_name])
     remove_server_from_shards(server_name)
@@ -179,9 +181,9 @@ def add_servers(servers):
         return jsonify({'message': f'Error: {str(e)}'}), 500
 
 def add_oldshards(newshard_ids, new_servers, spawning = False):
+    db_helper = SQLHandler()
     if spawning:
         time.sleep(9)
-        
         x = list(new_servers.keys())
         s_name = x[0]
         for key,val in new_servers.items():
@@ -270,6 +272,7 @@ def write_to_shard(shard_id, entries):
     try:
         db_mutex.acquire()
         try:
+            db_helper = SQLHandler()
             get_servers = db_helper.get_shard_servers(shard_id)
             get_idx = db_helper.get_shard_idx(shard_id)
         finally:
@@ -284,6 +287,7 @@ def write_to_shard(shard_id, entries):
         for ser in get_servers:
             server_locks[ser].acquire_write()
             try:
+                db_helper = SQLHandler()
                 response = requests.post(f"http://{ser}:5000/write?id={ser}",json=info)
                 data = json.loads(response.text)
                 print('write..........',data,flush=True)
@@ -344,7 +348,7 @@ def init():
         add_servers(servers)
         
         shard_all = [shard['Shard_id'] for shard in data['shards']]
-
+        db_helper = SQLHandler()
         db_helper.initialize_shard_map_table(data)
         shards_present = []
         for ser in servers:
@@ -401,6 +405,7 @@ def init():
 @app.route('/add',methods=["POST"])
 def add():
     try:
+        db_helper = SQLHandler()
         data = request.json
         n = data.get('n')
         new_shards = data.get('new_shards',[])
@@ -507,6 +512,7 @@ def rm():
 @app.route('/status',methods = ['GET'])
 def status():
     try:
+        db_helper = SQLHandler()
         serv_status = {key: [] for key in All_servers.keys()}
         shards,servers = db_helper.get_status(serv_status)
         schema = {"columns":["Stud_id","Stud_name","Stud_marks"],
@@ -530,6 +536,7 @@ def read():
         low = data['Stud_id']['low']
         high = data['Stud_id']['high']
         read_queue = Queue()
+        db_helper = SQLHandler()
         shards_req = db_helper.shards_required(low,high)
         threads = {}
         print('inside read',shard_locks,flush=True)
@@ -577,6 +584,7 @@ def write():
             print(entry,entry['Stud_id'],flush=True)
             db_mutex.acquire()
             try:
+                db_helper = SQLHandler()
                 res = db_helper.studid_to_shard(entry['Stud_id'])
             finally:
                 db_mutex.release()
@@ -610,6 +618,7 @@ def update():
         data = request.json
         St_id = data.get('Stud_id')
         row = data.get('data')
+        db_helper = SQLHandler()
         shard_id = db_helper.studid_to_shard(St_id)
         print(shard_id,St_id,row,flush=True)
         info = {
@@ -637,6 +646,7 @@ def delete():
     try:
         data = request.json
         St_id = data.get('Stud_id')
+        db_helper = SQLHandler()
         shard_id = db_helper.studid_to_shard(St_id)
         info = {
             "shard" : shard_id,

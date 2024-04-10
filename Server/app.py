@@ -2,7 +2,6 @@ from flask import Flask,jsonify,request
 import os
 from helper import SQLHandler
 
-db_helper = SQLHandler()
 
 app = Flask(__name__)
 
@@ -27,6 +26,7 @@ def heartbeat():
 @app.route('/config', methods=['POST'])
 def config():
     # data = request.json 
+    db_helper = SQLHandler()
     server_name = request.args.get('id')
     print("config server",flush=True)
     db_helper.connect()
@@ -46,6 +46,7 @@ def config():
 @app.route('/write', methods=['POST'])
 def write():
     # data = request.json 
+    db_helper = SQLHandler()
     db_helper.connect()
     try:
         request_payload = request.json
@@ -64,6 +65,7 @@ def write():
 def update():
     # data = request.json 
     print("update server",flush=True)
+    db_helper = SQLHandler()
     db_helper.connect()
     try:
         request_payload = request.json
@@ -82,6 +84,7 @@ def update():
 def delete():
     # data = request.json 
     print("delete server",flush=True)
+    db_helper = SQLHandler()
     db_helper.connect()
     try:
         request_payload = request.json
@@ -101,6 +104,7 @@ def delete():
 def read():
     # data = request.json 
     print("read server",flush=True)
+    db_helper = SQLHandler()
     db_helper.connect()
     try:
         request_payload = request.json
@@ -119,6 +123,7 @@ def read():
 def copy():
     # data = request.json 
     print("copy server",flush=True)
+    db_helper = SQLHandler()
     db_helper.connect()
     try:
         request_payload = request.json
