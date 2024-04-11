@@ -725,17 +725,26 @@ def delete():
         data = request.json
         St_id = data.get('Stud_id')
         shard_id = db_helper.studid_to_shard(St_id)
-        info = {
-            "shard" : shard_id,
-            "Stud_id" : St_id
-        }
+        # info = {
+        #     "shard" : shard_id,
+        #     "Stud_id" : St_id
+        # }
         print(shard_id,St_id,flush=True)
         servers = db_helper.get_shard_servers(shard_id)
         print(servers,flush=True)
-        for ser in servers:
-            response = requests.delete(f"http://{ser}:5000/delete?id={ser}",json=info)
-            x = json.loads(response.text)
-            print(x,flush=True)
+        primary_server = db_helper.get_primary_server(shard_id)
+        print(servers,primary_server,"from delete lb",flush=True)
+        info = {
+            "from": "LB",
+            "shard" : shard_id,
+            "Stud_id" : St_id,
+            "servers": servers,
+            "primary": primary_server
+        }
+        # for ser in servers:
+        response = requests.delete(f"http://{primary_server}:5000/delete?id={primary_server}",json=info)
+        x = json.loads(response.text)
+        print(x,flush=True)
         response = {
             "message" : f"Data entry with Stud_id: {St_id} removed",
             "status" : "success"
