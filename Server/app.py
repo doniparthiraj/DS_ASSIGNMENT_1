@@ -227,16 +227,61 @@ def delete():
     # data = request.json 
     db_helper = SQLHandler()
     print("delete server",flush=True)
+    server_name = request.args.get('id')
     db_helper.connect()
     try:
         request_payload = request.json
- 
-        # Validate the payload structure
-        if 'shard' in request_payload and 'Stud_id' in request_payload:
-            response = db_helper.delete_to_database(request_payload)
-            return response
- 
-        return jsonify({"error": "Invalid payload structure"}), 400
+        shard = request_payload['shard']
+        servers = request_payload['servers']
+        primary_server = request_payload['primary']
+        request_payload['operation'] = 'delete'
+        print("request_payload",request_payload,flush=True)
+        if request_payload['from'] == 'LB': #server is primary
+            print("I am primry server",flush=True)
+            shard_locks[shard].acquire_write()
+            try:
+                with open(f"{server_name}_{shard}.txt", "a") as file:
+                    logfile_info[f"{server_name}_{shard}"] = logfile_info[f"{server_name}_{shard}"]+1
+                    file.write(f"{request_payload}$")
+                count = 1
+                majority_count = 1
+                for backup in servers:
+                    if backup != primary_server:
+                        print("I am a backup",flush=True)
+                        try:
+                            response = requests.get(f"http://{backup}:5000/heartbeat?id={backup}")
+                            if response.status_code == 200:
+                                majority_count += 1
+                                request_payload['from'] = primary_server
+                                response = requests.delete(f"http://{backup}:5000/delete?id={backup}",json=request_payload)
+                                data = json.loads(response.text)
+                                print('delete..........',data,flush=True)
+                                if response.status_code == 200:
+                                    count = count+1
+                                    print("Request to", backup, "was successful")
+                                else:
+                                    print("Request to", backup, "failed with status code:", response.status_code)
+                        finally:
+                            print("delete to backup completed",flush=True)
+            finally:
+                shard_locks[shard].release_write()
+            if count>(majority_count)//2:
+                print("majority replied",flush=True)
+                if 'shard' in request_payload and 'Stud_id' in request_payload:
+                    response = db_helper.delete_to_database(request_payload)
+                    return response
+            return jsonify({"error": "Majority not reached or invalid payload structure"}), 400
+        else:
+            if request_payload['from'] != 'shard_manager':
+                with open(f"{server_name}_{shard}.txt", "a") as file:
+                    logfile_info[f"{server_name}_{shard}"] = logfile_info[f"{server_name}_{shard}"]+1
+                    file.write(f"{request_payload}$")
+            if 'shard' in request_payload and 'Stud_id' in request_payload:
+                response = db_helper.delete_to_database(request_payload)
+                return response
+    
+            return jsonify({"error": "Invalid payload structure"}), 400
+        
  
     except Exception as e:
         return jsonify({"error": f"An error occurred: {str(e)}"}), 500
