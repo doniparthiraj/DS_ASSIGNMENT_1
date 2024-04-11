@@ -96,31 +96,29 @@ def write():
                     logfile_info[f"{server_name}_{shard}"] = logfile_info[f"{server_name}_{shard}"]+1
                     file.write(f"{request_payload}$")
                 count = 1
+                majority_count = 1
                 for backup in servers:
                     if backup != primary_server:
                         print("I am a backup",flush=True)
                         try:
-                            request_payload['from'] = primary_server
-                            response = requests.post(f"http://{backup}:5000/write?id={backup}",json=request_payload)
-                            data = json.loads(response.text)
-                            print('write..........',data,flush=True)
-                            # new_idx = data['message']['current_idx']
-                            # db_mutex.acquire()
-                            # try:
-                            # update_response = db_helper.update_shard_idx(new_idx, shard_id)
-                            # finally:
-                                # db_mutex.release()
-                            print('successfully updated idx in shard_T schema ')
+                            response = requests.get(f"http://{backup}:5000/heartbeat?id={backup}")
                             if response.status_code == 200:
-                                count = count+1
-                                print("Request to", backup, "was successful")
-                            else:
-                                print("Request to", backup, "failed with status code:", response.status_code)
+                                majority_count += 1
+                                request_payload['from'] = primary_server
+                                response = requests.post(f"http://{backup}:5000/write?id={backup}",json=request_payload)
+                                data = json.loads(response.text)
+                                print('write..........',data,flush=True)
+                                print('successfully updated idx in shard_T schema ')
+                                if response.status_code == 200:
+                                    count = count+1
+                                    print("Request to", backup, "was successful")
+                                else:
+                                    print("Request to", backup, "failed with status code:", response.status_code)
                         finally:
                             print("write to backup completed",flush=True)
             finally:
                 shard_locks[shard].release_write()
-            if count>((len(servers)-1)//2):
+            if count>(majority_count)//2:
                 print("majority replied",flush=True)
                 if 'shard' in request_payload and 'data' in request_payload:
                     response = db_helper.write_to_database(request_payload)
