@@ -42,13 +42,23 @@ def generateId():
         if random_id not in All_servers.values():
             return random_id
 
-def start_new_server(ser_name):
-    container_name = ser_name 
+def start_new_server(server_name):
+    #giving container name and adding a new container
+    container_name = server_name 
     image_name = DOCKER_IMAGE_NAME
-    res = os.popen(f'sudo docker run --name {container_name} --network ds_assignment_1_net1 --network-alias {container_name} -d {image_name}').read()
+    host_volume_path = "/home/rajkiran/dsproj/DS_ASSIGNMENT_1/shardsinfo"
+    container_volume_path = "/app/data"  # This is the path your Flask app inside the container will write to
 
+    # Adjusted docker run command to include the volume mount
+    run_command = (
+        f'sudo docker run --name {container_name} '
+        f'--network ds_assignment_1_net1 --network-alias {container_name} '
+        f'-v {host_volume_path}:{container_volume_path} '  # Mounting the volume
+        f'-d {image_name}'
+    )
+    res = os.popen(run_command).read()
     if len(res) > 0:
-        All_servers[ser_name] = generateId() #adding it to the dict
+        All_servers[server_name] = generateId() #adding it to the dict
         print("Success")
     else:
         raise Exception("Failed to start the server. Check logs for details.")
@@ -135,15 +145,13 @@ def spawn_new_server(ser_name):
 
 def continuous_server_check():
     while(True):
-        time.sleep(80)
-        if bool(All_servers) == False:
-            time.sleep(50)
-            continue
+        if len(All_servers) == 0:
+            time.sleep(40)
         for ser_name in list(All_servers.keys()):
             if checkHeartbeat(ser_name) != 200:
                 spawn_new_server(ser_name)
                 print("server not found from shardmanager", ser_name, flush=True)
-                time.sleep(20)
+                time.sleep(30)
             else:
                 print("server is there from shard mangaer",ser_name, flush=True)
         time.sleep(2)
