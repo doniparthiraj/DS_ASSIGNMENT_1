@@ -62,7 +62,7 @@ def config():
                 key = server_name+"_"+shard 
                 logfile_info[key] = 0
                 print("logile info",logfile_info,flush=True)
-                with open(f"{server_name}_{shard}.txt","w") as file:
+                with open(f"/app/data/{server_name}_{shard}.txt","w") as file:
                     pass
             response = db_helper.initialize_shard_tables(request_payload, server_name)
             return response
@@ -92,9 +92,9 @@ def write():
             shard_locks[shard].acquire_write()
             try:
              
-                with open(f"{server_name}_{shard}.txt", "a") as file:
+                with open(f"/app/data/{server_name}_{shard}.txt", "a") as file:
                     logfile_info[f"{server_name}_{shard}"] = logfile_info[f"{server_name}_{shard}"]+1
-                    file.write(f"{request_payload}$")
+                    file.write(f"{request_payload}\n")
                 count = 1
                 majority_count = 1
                 for backup in servers:
@@ -128,9 +128,9 @@ def write():
 
         else:
             if request_payload['from'] != 'shard_manager':
-                with open(f"{server_name}_{shard}.txt", "a") as file:
+                with open(f"/app/data/{server_name}_{shard}.txt", "a") as file:
                     logfile_info[f"{server_name}_{shard}"] = logfile_info[f"{server_name}_{shard}"]+1
-                    file.write(f"{request_payload}$")
+                    file.write(f"{request_payload}\n")
                 
         # Validate the payload structure
             if 'shard' in request_payload and 'data' in request_payload:
@@ -163,9 +163,9 @@ def update():
             shard_locks[shard].acquire_write()
             try:
              
-                with open(f"{server_name}_{shard}.txt", "a") as file:
+                with open(f"/app/data/{server_name}_{shard}.txt", "a") as file:
                     logfile_info[f"{server_name}_{shard}"] = logfile_info[f"{server_name}_{shard}"]+1
-                    file.write(f"{request_payload}$")
+                    file.write(f"{request_payload}\n")
                 count = 1
                 majority_count = 1
                 for backup in servers:
@@ -206,9 +206,9 @@ def update():
 
         else:
             if request_payload['from'] != 'shard_manager':
-                with open(f"{server_name}_{shard}.txt", "a") as file:
+                with open(f"/app/data/{server_name}_{shard}.txt", "a") as file:
                     logfile_info[f"{server_name}_{shard}"] = logfile_info[f"{server_name}_{shard}"]+1
-                    file.write(f"{request_payload}$")
+                    file.write(f"{request_payload}\n")
                 
         # Validate the payload structure
 
@@ -240,9 +240,9 @@ def delete():
             print("I am primry server",flush=True)
             shard_locks[shard].acquire_write()
             try:
-                with open(f"{server_name}_{shard}.txt", "a") as file:
+                with open(f"/app/data/{server_name}_{shard}.txt", "a") as file:
                     logfile_info[f"{server_name}_{shard}"] = logfile_info[f"{server_name}_{shard}"]+1
-                    file.write(f"{request_payload}$")
+                    file.write(f"{request_payload}\n")
                 count = 1
                 majority_count = 1
                 for backup in servers:
@@ -273,9 +273,9 @@ def delete():
             return jsonify({"error": "Majority not reached or invalid payload structure"}), 400
         else:
             if request_payload['from'] != 'shard_manager':
-                with open(f"{server_name}_{shard}.txt", "a") as file:
+                with open(f"/app/data/{server_name}_{shard}.txt", "a") as file:
                     logfile_info[f"{server_name}_{shard}"] = logfile_info[f"{server_name}_{shard}"]+1
-                    file.write(f"{request_payload}$")
+                    file.write(f"{request_payload}\n")
             if 'shard' in request_payload and 'Stud_id' in request_payload:
                 response = db_helper.delete_to_database(request_payload)
                 return response
@@ -341,7 +341,7 @@ def get_log_entries():
     server_name = request.args.get('id')
     request_payload = request.json
     shard = request_payload['shard']
-    with open(f"{server_name}_{shard}.txt","r") as file:
+    with open(f"/app/data/{server_name}_{shard}.txt","r") as file:
         contents = file.read()
     print("contents of the log file",contents,flush=True)
     return jsonify({
@@ -354,8 +354,8 @@ def write_log_entries():
     request_payload = request.json
     shard = request_payload['shard']
     contents = request_payload['contents']
-    logfile_info[f"{server_name}_{shard}"] = len(contents.strip().split('$'))
-    with open(f"{server_name}_{shard}.txt","a") as file:
+    logfile_info[f"{server_name}_{shard}"] = len(contents.strip().split('\n'))
+    with open(f"/app/data/{server_name}_{shard}.txt","w") as file:
         file.write(contents)
     print(f"Contents written to log file of {server_name}_{shard}",flush =True)
     return jsonify({'message':'Contents written successfully'}),200

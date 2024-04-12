@@ -10,6 +10,7 @@ services:
     privileged: true
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
+      - /home/rajkiran/dsproj/DS_ASSIGNMENT_1/shardsinfo:/home/rajkiran/dsproj/DS_ASSIGNMENT_1/shardsinfo
     networks:
       net1:
         aliases:
