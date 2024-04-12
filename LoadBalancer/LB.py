@@ -94,7 +94,17 @@ def start_new_server(server_name):
     #giving container name and adding a new container
     container_name = server_name 
     image_name = DOCKER_IMAGE_NAME
-    res = os.popen(f'sudo docker run --name {container_name} --network ds_assignment_1_net1 --network-alias {container_name} -d {image_name}').read()
+    host_volume_path = "/home/rajkiran/dsproj/DS_ASSIGNMENT_1/shardsinfo"
+    container_volume_path = "/app/data"  # This is the path your Flask app inside the container will write to
+
+    # Adjusted docker run command to include the volume mount
+    run_command = (
+        f'sudo docker run --name {container_name} '
+        f'--network ds_assignment_1_net1 --network-alias {container_name} '
+        f'-v {host_volume_path}:{container_volume_path} '  # Mounting the volume
+        f'-d {image_name}'
+    )
+    res = os.popen(run_command).read()
 
     if len(res) > 0:
         All_servers[server_name] = generateId() #adding it to the dict
@@ -165,7 +175,7 @@ def get_avail_serv(cli_id, hash_obj, max_attempts = 10):
             if checkHeartbeat(get_ser_name) == 200: #used to see the server is alive or not and returns if avaliable
                 return get_ser_name
             else:
-                time.sleep(80)
+                time.sleep(10)
         attempts += 1
 
     raise Exception("No available servers after multiple attempts")
@@ -393,7 +403,7 @@ def init():
             shards_present.extend(info['shards']) 
             print(ser,info,flush = True)
 
-            time.sleep(80)
+            time.sleep(10)
 
             response = requests.post(f"http://{ser}:5000/config?id={ser}", json=info)
             if response.status_code == 200:
@@ -428,7 +438,7 @@ def init():
             server_locks[ser] = ReadWriteLock()
 
 
-        time.sleep(80)
+        time.sleep(10)
 
         # shard_ser = db_helper.all_shard_servers()
         # print(shard_ser,flush=True)
@@ -502,7 +512,7 @@ def add():
                 
                 print(ser,info,flush = True)
 
-                time.sleep(80)
+                time.sleep(10)
 
                 response = requests.post(f"http://{ser}:5000/config?id={ser}",json=info)
                 if response.status_code == 200:
