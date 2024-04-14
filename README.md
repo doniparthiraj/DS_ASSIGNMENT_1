@@ -8,7 +8,7 @@
 
 **->check readme.pdf for assignment 1 analysis ->check report\_ds.pdf for assignment 2 analysis.**
 
-**Assignment - 3 check here**
+**Assignment - 3 check here or in readme_A3.pdf**
 
 **TASK A-1**
 
