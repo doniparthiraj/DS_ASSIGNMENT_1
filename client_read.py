@@ -15,9 +15,13 @@ async def client_request(session, url, payload=None):
 async def send_requests(session, read_link, num_read_req):
     server_ids = []
     for _ in range(num_read_req):
-        cli_id = random.randint(1, 10000)
+        cli_id = random.randint(1, 100000)
+        l = random.randint(1, 16000)
+        h = random.randint(1, 16380)
+        while(h < l):
+            h = random.randint(1, 16380)
         payload = {
-            "Stud_id": {"low": random.randint(1, 6000), "high": random.randint(6001, 12000)}
+            "Stud_id": {"low": l, "high": h}
         }
         url = f"{read_link}?id={cli_id}"
         response_text = await client_request(session, url, payload)
@@ -27,8 +31,8 @@ async def send_requests(session, read_link, num_read_req):
     return server_ids
 
 async def main():
-    read_link = 'http://127.0.0.1:5000/read'
-    num_read_req = 5000  # Total number of read requests
+    read_link = 'http://127.0.0.1:5001/read'
+    num_read_req = 100  # Total number of read requests
     timeout = aiohttp.ClientTimeout(total=10000)
     async with aiohttp.ClientSession(timeout=timeout) as session:
         start_time = time.time()

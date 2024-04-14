@@ -12,7 +12,7 @@ import numpy as np
 
 app = Flask(__name__)
 
-db_helper = SQLHandler()
+# db_helper = SQLHandler()
 shard_hash = {}
 shard_locks = {}
 server_locks = {}
@@ -127,6 +127,7 @@ def checkHeartbeat(server_name):
 
 def removeServer(server_name):
     try:
+        db_helper = SQLHandler()
         hash.rem_server(All_servers[server_name])
         remove_server_from_shards(server_name)
         res = db_helper.remove_server(server_name)
@@ -140,6 +141,7 @@ def removeServer(server_name):
 
 def remove_server_from_shards(server_name):
     try:
+        db_helper = SQLHandler()
         shard_ser = db_helper.all_shard_servers()
         for shard, servers in shard_ser.items():
             if server_name in servers:
@@ -152,6 +154,7 @@ def remove_server_from_shards(server_name):
 
 
 def spawn_new_server(server_name):
+    db_helper = SQLHandler()
     shards = db_helper.get_shards_server(server_name)
     hash.rem_server(All_servers[server_name])
     remove_server_from_shards(server_name)
@@ -216,6 +219,7 @@ def add_oldshards(newshard_ids, new_servers, spawning = False):
     #     server_locks[s_name] = ReadWriteLock()
 
     for new_ser, shards in new_servers.items():
+        db_helper = SQLHandler()
         for sid in shards:
             if sid not in newshard_ids:
                 # ser = db_helper.get_shard_servers(sid)
@@ -275,7 +279,7 @@ def read_to_shard(shard_id, server_name, low, high, read_queue):
         try:
             response = requests.post(f"http://{server_name}:5000/read?id={server_name}",json=info)
             data = json.loads(response.text)
-            #print('Inside',data,flush=True)
+            print('read Ready queue returned',flush=True)
             read_queue.put(data)
         except Exception as e:
             print('Error while reading from shards in read_to_shard func: ',e,flush=True)
@@ -287,7 +291,7 @@ def read_to_shard(shard_id, server_name, low, high, read_queue):
 def write_to_shard(shard_id, entries):
 
     # shard_locks[shard_id].acquire_write()
-    
+    db_helper = SQLHandler()
     try:
         db_mutex.acquire()
         try:
@@ -392,7 +396,7 @@ def init():
         print("inside LB",data,flush=True)
         ##
         shard_all = [shard['Shard_id'] for shard in data['shards']]
-
+        db_helper = SQLHandler()
         db_helper.initialize_shard_map_table(data)
         shards_present = []
         for ser in servers:
@@ -438,7 +442,7 @@ def init():
             server_locks[ser] = ReadWriteLock()
 
 
-        time.sleep(10)
+        # time.sleep(10)
 
         # shard_ser = db_helper.all_shard_servers()
         # print(shard_ser,flush=True)
@@ -466,6 +470,7 @@ def add():
         shard_manager = {}
         primary = {}
         new_shard_ids = [shard["Shard_id"] for shard in new_shards]
+        db_helper = SQLHandler()
         for key,val in servers.items():
             for v in val:
                 if v in new_shard_ids:
@@ -578,7 +583,11 @@ def rm():
                 if len(result) > 0: #checking if containers are available or not for removing
                     random_server = result[0]
                     removeServer(random_server)
-                    deleted_servers.append(random_server) 
+                    deleted_servers.append(random_server)
+            info = {
+                'servers':deleted_servers
+            }
+            res = requests.post(f"http://shardmanager:5000/shardrm",json=info)
             print('After removing : ',All_servers,flush=True)
             return jsonify({
                 'message': {
@@ -591,9 +600,11 @@ def rm():
         return jsonify({'message': f'rmError: {str(e)}'}), 500
 
 
+
 @app.route('/status',methods = ['GET'])
 def status():
     try:
+        db_helper = SQLHandler()
         serv_status = {key: [] for key in All_servers.keys()}
         shards,servers = db_helper.get_status(serv_status)
         schema = {"columns":["Stud_id","Stud_name","Stud_marks"],
@@ -612,6 +623,7 @@ def status():
 @app.route('/read',methods = ['POST'])
 def read():
     try:
+        db_helper = SQLHandler()
         data = request.json
         low = data['Stud_id']['low']
         high = data['Stud_id']['high']
@@ -622,12 +634,12 @@ def read():
         finally:
             db_mutex.release()
         threads = {}
-        print('inside read',shard_locks,flush=True)
+        # print('inside read',shard_locks,flush=True)
         cli_id = request.args.get('id')
         for shard_id in shards_req:
-            print('before',shard_hash,shard_id,flush=True)
+            # print('before',shard_hash,shard_id,flush=True)
             server_name = get_avail_serv(cli_id, shard_hash[shard_id])
-            print('after',shard_hash,shard_id,server_name,flush=True)
+            # print('after',shard_hash,shard_id,server_name,flush=True)
             threads[shard_id] = threading.Thread(target=read_to_shard, args=(shard_id, server_name, low, high,read_queue))
             threads[shard_id].start()
     
@@ -663,20 +675,21 @@ def write():
         write_shard = {}
         all_rows = data.get('data')
         n = len(all_rows)
+        db_helper = SQLHandler()
         for entry in all_rows:
-            print(entry,entry['Stud_id'],flush=True)
+            # print(entry,entry['Stud_id'],flush=True)
             db_mutex.acquire()
             try:
                 res = db_helper.studid_to_shard(entry['Stud_id'])
             finally:
                 db_mutex.release()
-            print('from db : ',res, type(res),flush=True)
+            # print('from db : ',res, type(res),flush=True)
             if len(write_shard) == 0 or res not in write_shard:
                 write_shard[res]=[]
             write_shard[res].append(entry)
-        print(write_shard,flush =True)
+        # print(write_shard,flush =True)
         threads = {}
-        print('inside write',shard_locks,flush=True)
+        # print('inside write',shard_locks,flush=True)
         for shard_id, entries in write_shard.items():
             threads[shard_id] = threading.Thread(target=write_to_shard, args=(shard_id, entries))
             threads[shard_id].start()
@@ -697,6 +710,7 @@ def write():
 @app.route('/update',methods = ['PUT'])
 def update():
     try:
+        db_helper = SQLHandler()
         data = request.json
         St_id = data.get('Stud_id')
         row = data.get('data')
@@ -732,6 +746,7 @@ def update():
 @app.route('/delete',methods = ['DELETE'])
 def delete():
     try:
+        db_helper = SQLHandler()
         data = request.json
         St_id = data.get('Stud_id')
         shard_id = db_helper.studid_to_shard(St_id)
@@ -783,6 +798,7 @@ def remove_server_from_db():
 @app.route('/spawn_add_map_table',methods = ['POST'])
 def spawn_add_map_table():
     try:
+        db_helper = SQLHandler()
         data = request.json
         shard = data['shard']
         server = data['server']
@@ -802,6 +818,7 @@ def spawn_add_map_table():
 @app.route('/update_map_table',methods = ['POST'])
 def update_map_table():
     try:
+        db_helper = SQLHandler()
         data = request.json
         shard = data['shard']
         server = data['server']

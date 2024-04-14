@@ -21,7 +21,7 @@ def get_servers_of_shards(shard):
 
 def leader_election(old_primary,shard):
     servers_list = get_servers_of_shards(shard)
-    max_index = 0
+    max_index = -1
     new_primary = None
     for server in servers_list:
         if server!=old_primary:
@@ -51,15 +51,12 @@ def start_new_server(server_name):
 
     # Adjusted docker run command to include the volume mount
     run_command = (
-        f'sudo docker run --name {container_name} '
-        f'--network ds_assignment_1_net1 --network-alias {container_name} '
-        f'-v {host_volume_path}:{container_volume_path} '  # Mounting the volume
-        f'-d {image_name}'
+        f'sudo docker start {container_name}'
     )
     res = os.popen(run_command).read()
     if len(res) > 0:
         All_servers[server_name] = generateId() #adding it to the dict
-        print("Success")
+        print("Success in start new server",flush=True)
     else:
         raise Exception("Failed to start the server. Check logs for details.")
 
@@ -121,7 +118,8 @@ def spawn_new_server(ser_name):
 
         MapT = [shard_ser for shard_ser in MapT if shard_ser[1] != ser_name]
         random_id = random.randint(1,10)
-        new_server = f'{ser_name}_{random_id}'
+        new_server = f'{ser_name}'
+        print("before",flush=True)
         start_new_server(new_server)
         db_schema = {
             'schema':{
@@ -154,7 +152,7 @@ def continuous_server_check():
                 time.sleep(30)
             else:
                 print("server is there from shard mangaer",ser_name, flush=True)
-        time.sleep(2)
+        time.sleep(10)
 
 server_check_thread = threading.Thread(target=continuous_server_check)
 server_check_thread.daemon = True  # Daemonize the thread so it will exit when the main thread exits
@@ -190,7 +188,35 @@ def init():
         print("Inside ShardManager app.py",MapT,flush=True)
         return jsonify("Init Shard Manager Successful"),200
     except Exception as e:
-        print('Shard Manager error : ',e,flush=True)
+        print('Shard Manager error in shardinit: ',e,flush=True)
+        return jsonify({'message':f'Error :{str(e)}'}),500
+
+@app.route('/shardrm',methods = ["POST"])
+def shardrm():
+    global All_servers
+    global MapT
+    try:
+        data = request.json
+        servers = data['servers']
+        for ser in servers:
+            All_servers.pop(ser)
+        
+        for ser in servers:
+            primary_shards = [shard_ser[0] for shard_ser in MapT if shard_ser[1] == ser and shard_ser[2] == 1]
+            MapT = [shard_ser for shard_ser in MapT if shard_ser[1] != ser] 
+            for shard in primary_shards:
+                new_primary = leader_election(ser,shard)
+                MapT.append([shard,new_primary,1])
+                update_payload = {
+                    'shard':shard,
+                    'server':new_primary
+                }
+                res = requests.post(f"http://lb_server:5000/update_map_table",json = update_payload)
+
+           
+        return jsonify("Shard rm successful"),200
+    except Exception as e:
+        print('Shard Manager error in shardrm : ',e,flush=True)
         return jsonify({'message':f'Error :{str(e)}'}),500
 
 if __name__ == '__main__':

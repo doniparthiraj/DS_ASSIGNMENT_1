@@ -16,8 +16,8 @@ async def client_request(session, url, payload=None):
  
  
 async def main():
-    write_link = 'http://127.0.0.1:5000/write'
-    num_write_req = 1000
+    write_link = 'http://127.0.0.1:5001/write'
+    num_write_req = 100
     server_ids = []
     used_ids = set()
     start_time = time.time()
@@ -26,9 +26,9 @@ async def main():
         tasks = []
  
         for i in range(num_write_req):
-            stud_id = random.randint(0,12000)
+            stud_id = random.randint(0,16380)
             while stud_id in used_ids:
-                stud_id = random.randint(0,12000)
+                stud_id = random.randint(0,16380)
             used_ids.add(stud_id)
  
         used_ids = list(used_ids)
